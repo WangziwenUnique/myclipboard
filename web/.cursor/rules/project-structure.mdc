@@ -1,0 +1,103 @@
+
+# 项目结构指南
+
+这是一个使用 React 19 + TypeScript + Vite 的现代前端项目。
+
+## 主要入口点
+- [src/main.tsx](mdc:myclipboard/src/main.tsx) - 应用的主入口点
+- [src/App.tsx](mdc:myclipboard/src/App.tsx) - 主要的 React 组件
+- [index.html](mdc:myclipboard/index.html) - HTML 模板文件
+
+## 配置文件
+- [package.json](mdc:myclipboard/package.json) - 项目依赖和脚本
+- [tsconfig.json](mdc:myclipboard/tsconfig.json) - TypeScript 配置
+- [tsconfig.app.json](mdc:myclipboard/tsconfig.app.json) - 应用特定的 TypeScript 配置
+- [vite.config.ts](mdc:myclipboard/vite.config.ts) - Vite 构建工具配置
+- [eslint.config.js](mdc:myclipboard/eslint.config.js) - ESLint 代码规范配置
+
+## 资源目录规则
+
+### @assets/ (src/assets/)
+- **构建时处理**：文件会被 Vite 处理、压缩、优化
+- **导入方式**：使用 ES6 import 语句导入
+- **路径解析**：需要配置路径别名（当前项目未配置）
+- **适用场景**：需要处理的资源（图片、字体、样式等）
+
+### @public/ (public/)
+- **直接复制**：文件原样复制到构建输出目录
+- **访问方式**：通过绝对路径直接引用
+- **路径解析**：不需要配置，直接使用 `/` 开头
+- **适用场景**：不需要处理的静态文件（favicon、robots.txt等）
+
+## 项目特点
+- 使用 React 19 的最新特性
+- 严格的 TypeScript 配置
+- 现代化的 ESLint 配置
+- Vite 作为构建工具
+
+## 开发工作流程
+
+### 项目脚本
+- `pnpm dev` - 启动开发服务器
+- `pnpm build` - 构建生产版本
+- `pnpm lint` - 运行 ESLint 检查
+- `pnpm preview` - 预览构建结果
+
+### 代码质量
+- 使用 ESLint 进行代码规范检查
+- 遵循 TypeScript 严格模式
+- 保持代码风格一致
+
+### 开发环境
+- 使用 Vite 作为构建工具，支持热模块替换 (HMR)
+- 支持 TypeScript 和 JSX
+- 现代化的开发体验
+
+### 文件组织
+- 源代码放在 `src/` 目录
+- 静态资源放在 `public/` 目录
+- 配置文件在项目根目录
+
+## React 开发模式
+
+### 组件结构
+- 使用函数组件和现代 React Hooks
+- 保持组件简洁，单一职责原则
+- 使用 TypeScript 为组件 props 定义类型
+
+### Hooks 使用
+- 优先使用内置 Hooks（useState, useEffect, useCallback 等）
+- 遵循 Hooks 的规则和最佳实践
+- 自定义 Hooks 应该以 `use` 开头
+
+### 状态管理
+- 使用 `useState` 管理本地状态
+- 对于复杂状态，考虑使用 `useReducer`
+- 避免过度使用全局状态
+
+### 性能优化
+- 使用 `React.memo` 优化组件渲染
+- 合理使用 `useCallback` 和 `useMemo`
+- 避免在渲染函数中创建新对象或函数
+
+## TypeScript 编码标准
+
+### 类型安全
+- 始终使用严格的 TypeScript 配置
+- 避免使用 `any` 类型，优先使用具体的类型定义
+- 利用 TypeScript 的严格模式特性
+
+### React 组件
+- 使用函数组件和 React Hooks
+- 为 props 和 state 定义明确的类型接口
+- 使用 `React.FC` 或明确的返回类型
+
+### 导入导出
+- 使用 ES6 模块语法
+- 优先使用命名导入而不是默认导入
+- 保持导入语句的整洁和有序
+
+### 代码组织
+- 将类型定义放在文件顶部
+- 使用接口定义对象结构
+- 利用 TypeScript 的联合类型和泛型

@@ -1,0 +1,865 @@
+/* 全局样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  background-color: #000;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #000;
+  color: #fff;
+  line-height: 1.6;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+.app {
+  min-height: 100vh;
+  background-color: #000;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 防止滚动边界显示不同背景 */
+.app::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #000;
+  z-index: -2;
+}
+
+.app-container {
+  width: 100%;
+  max-width: 1400px;
+  min-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  padding-top: 6rem;
+}
+
+/* 导航栏 */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem 1.5rem;
+  border: 1px solid #333;
+  border-radius: 12px;
+  width: calc(100% - 2rem);
+  max-width: 1400px;
+  margin: 0;
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+  background-color: rgba(0, 0, 0, 0.9);
+  border-color: rgba(51, 51, 51, 0.8);
+  transition: all 0.3s ease;
+}
+
+.navbar.scrolled {
+  background-color: rgba(0, 0, 0, 0.9);
+  border-color: rgba(51, 51, 51, 0.8);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.nav-left .logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.logo-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-center {
+  display: flex;
+  gap: 2.5rem;
+  justify-content: center;
+  flex: 1;
+}
+
+.nav-center a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+
+.nav-center a:hover {
+  opacity: 0.7;
+}
+
+.download-btn {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #000;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s;
+  white-space: nowrap;
+  backdrop-filter: blur(10px);
+}
+
+.download-btn:hover {
+  background-color: rgba(245, 245, 245, 0.95);
+  transform: translateY(-1px);
+}
+
+.apple-icon {
+  width: 16px;
+  height: 16px;
+}
+
+/* Hero区域 */
+.hero {
+  text-align: center;
+  padding: 4rem 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 100vh;
+}
+
+.confetti-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+.confetti-container {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  margin: 2rem 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.awards {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+  margin-bottom: 3rem;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.product-hunt-badge {
+  color: #fff;
+  padding: 0.8rem 1.5rem;
+  border-radius: 25px;
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.whats-new-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.8rem 1.5rem;
+  border-radius: 25px;
+  transition: background-color 0.2s;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.whats-new-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.main-title {
+  font-size: 4rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.description {
+  font-size: 1.3rem;
+  color: #ccc;
+  margin-bottom: 4rem;
+  max-width: 650px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.6;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.primary-download-btn {
+  background-color: #fff;
+  color: #000;
+  border: none;
+  padding: 1.2rem 2.5rem;
+  border-radius: 10px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0 auto 3rem;
+  transition: all 0.2s;
+  box-shadow: 0 8px 30px rgba(255, 255, 255, 0.2);
+}
+
+.primary-download-btn:hover {
+  background-color: #f5f5f5;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(255, 255, 255, 0.3);
+}
+
+.primary-download-btn .apple-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.download-options {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 4rem;
+  font-size: 0.95rem;
+  color: #999;
+  flex-wrap: wrap;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.separator {
+  color: #666;
+}
+
+.social-proof {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.avatars {
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  margin-left: -15px;
+  position: relative;
+  z-index: 1;
+}
+
+.avatar:first-child {
+  margin-left: 0;
+}
+
+.avatar-1 { background-color: #ff6b6b; }
+.avatar-2 { background-color: #4ecdc4; }
+.avatar-3 { background-color: #45b7d1; }
+.avatar-4 { background-color: #96ceb4; }
+.avatar-5 { background-color: #feca57; }
+.avatar-6 { background-color: #ff9ff3; }
+.avatar-7 { background-color: #54a0ff; }
+
+/* macOS UI演示 */
+.macos-demo {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 3rem;
+  padding: 6rem 0;
+  position: relative;
+  width: 100%;
+}
+
+.macos-window {
+  background-color: #1a1a1a;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6);
+  min-width: 650px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.menu-bar {
+  background-color: #2a2a2a;
+  padding: 0.8rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.menu-left, .menu-right {
+  display: flex;
+  gap: 1.2rem;
+  align-items: center;
+}
+
+.app-content {
+  position: relative;
+  height: 350px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 2.5rem;
+}
+
+.gradient-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #ff6b35, #8a2be2);
+  opacity: 0.25;
+}
+
+.search-bar {
+  background-color: rgba(255, 255, 255, 0.15);
+  padding: 1rem 1.2rem;
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(15px);
+  z-index: 1;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.action-icons {
+  display: flex;
+  gap: 1.2rem;
+  z-index: 1;
+  position: relative;
+}
+
+.icon {
+  width: 45px;
+  height: 45px;
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+}
+
+.icon:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.context-menu {
+  background-color: #fff;
+  color: #000;
+  border-radius: 12px;
+  padding: 0.8rem 0;
+  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+  min-width: 220px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.menu-item {
+  padding: 0.8rem 1.2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.menu-item:hover {
+  background-color: #f5f5f5;
+}
+
+.shortcut {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.arrow {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+/* AI助手图标 */
+.ai-assistant {
+  position: fixed;
+  right: 3rem;
+  bottom: 3rem;
+  z-index: 1000;
+}
+
+.ai-icon {
+  width: 70px;
+  height: 70px;
+  background: linear-gradient(135deg, #8a2be2, #ff6b35);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  cursor: pointer;
+  box-shadow: 0 15px 40px rgba(138, 43, 226, 0.4);
+  transition: transform 0.2s;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-icon:hover {
+  transform: scale(1.1);
+}
+
+/* 下载按钮组 */
+.download-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
+}
+
+.secondary-download-btn {
+  background-color: transparent;
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 1.2rem 2.5rem;
+  border-radius: 10px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  transition: all 0.2s;
+}
+
+.secondary-download-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* 功能特性区域 */
+.features {
+  width: 100%;
+  padding: 6rem 0;
+  text-align: center;
+}
+
+.section-header {
+  margin-bottom: 4rem;
+}
+
+.section-header h2 {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  color: #fff;
+}
+
+.section-header p {
+  font-size: 1.3rem;
+  color: #ccc;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.feature-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 1rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s;
+}
+
+.feature-item:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-5px);
+}
+
+.feature-icon {
+  font-size: 3rem;
+}
+
+.feature-item h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+/* 核心功能展示 */
+.core-features {
+  width: 100%;
+  padding: 6rem 0;
+}
+
+.feature-card {
+  display: flex;
+  align-items: center;
+  gap: 4rem;
+  margin-bottom: 6rem;
+  padding: 2rem 0;
+}
+
+.feature-card.reverse {
+  flex-direction: row-reverse;
+}
+
+.feature-content {
+  flex: 1;
+}
+
+.feature-content h3 {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #fff;
+}
+
+.feature-content p {
+  font-size: 1.1rem;
+  color: #ccc;
+  line-height: 1.7;
+}
+
+.feature-visual {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+/* 预览演示 */
+.preview-demo {
+  background-color: #1a1a1a;
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  min-width: 300px;
+}
+
+.demo-header {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.demo-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.demo-dot.red { background-color: #ff5f56; }
+.demo-dot.yellow { background-color: #ffbd2e; }
+.demo-dot.green { background-color: #27ca3f; }
+
+.demo-content {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 1rem;
+  border-radius: 8px;
+}
+
+.demo-text {
+  color: #fff;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.9rem;
+}
+
+/* 键盘演示 */
+.keyboard-demo {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.key {
+  background-color: #333;
+  color: #fff;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  min-width: 50px;
+  text-align: center;
+}
+
+/* 快捷键演示 */
+.shortcut-demo {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.shortcut-demo .key {
+  background-color: #4a4a4a;
+  font-weight: 600;
+}
+
+/* 用户评价 */
+.testimonials {
+  width: 100%;
+  padding: 6rem 0;
+  text-align: center;
+}
+
+.testimonial-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 4rem;
+}
+
+.testimonial-card {
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2rem;
+  text-align: left;
+  transition: all 0.3s;
+}
+
+.testimonial-card:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-5px);
+}
+
+.stars {
+  color: #ffd700;
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.testimonial-card p {
+  color: #fff;
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+  font-style: italic;
+}
+
+.testimonial-author {
+  color: #ccc;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* 底部下载区域 */
+.bottom-download {
+  width: 100%;
+  padding: 6rem 0;
+  text-align: center;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bottom-download h2 {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: #fff;
+}
+
+.bottom-download p {
+  font-size: 1.2rem;
+  color: #ccc;
+  margin-bottom: 3rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.primary-download-btn.large {
+  padding: 1.5rem 3rem;
+  font-size: 1.3rem;
+}
+
+.primary-download-btn.large .apple-icon {
+  width: 24px;
+  height: 24px;
+}
+
+/* 响应式设计 */
+@media (max-width: 1400px) {
+  .app-container {
+    padding: 0 1rem;
+    min-width: 1000px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .app-container {
+    min-width: 800px;
+  }
+}
+
+@media (max-width: 768px) {
+  body {
+    padding: 0;
+  }
+  
+  .app-container {
+    padding: 0 0.75rem;
+    padding-top: 8rem;
+    min-width: 100%;
+  }
+  
+  .navbar {
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.5rem 0;
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    right: 0.5rem;
+    transform: none;
+    width: auto;
+  }
+  
+  .nav-center {
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  
+  .main-title {
+    font-size: 2.8rem;
+  }
+  
+  .hero {
+    padding: 4rem 0;
+  }
+  
+  .download-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .download-buttons button {
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .section-header h2 {
+    font-size: 2.5rem;
+  }
+  
+  .feature-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1.5rem;
+  }
+  
+  .feature-card {
+    flex-direction: column;
+    gap: 2rem;
+    text-align: center;
+  }
+  
+  .feature-card.reverse {
+    flex-direction: column;
+  }
+  
+  .feature-content h3 {
+    font-size: 1.8rem;
+  }
+  
+  .testimonial-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .bottom-download h2 {
+    font-size: 2.5rem;
+  }
+  
+  .ai-assistant {
+    right: 1.5rem;
+    bottom: 1.5rem;
+  }
+  
+  .ai-icon {
+    width: 60px;
+    height: 60px;
+    font-size: 1.5rem;
+  }
+}
