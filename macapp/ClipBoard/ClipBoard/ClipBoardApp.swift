@@ -8,6 +8,17 @@
 import SwiftUI
 import AppKit
 
+// 自定义窗口类，允许无边框窗口接收键盘输入
+class KeyboardAccessibleWindow: NSWindow {
+    override var canBecomeKey: Bool {
+        return true
+    }
+    
+    override var canBecomeMain: Bool {
+        return true
+    }
+}
+
 @main
 struct ClipBoardApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -89,7 +100,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hostingController.view.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
         ])
         
-        window = NSWindow(
+        window = KeyboardAccessibleWindow(
             contentRect: NSRect(x: 0, y: 0, width: 820, height: 540),
             styleMask: [.borderless],
             backing: .buffered,

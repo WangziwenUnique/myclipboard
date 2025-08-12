@@ -413,11 +413,11 @@ struct SearchBar: View {
                 textFieldFocused = true
             }
         }
-        .onChange(of: isSearchFocused) { newValue in
-            textFieldFocused = newValue
+        .onChange(of: isSearchFocused) {
+            textFieldFocused = isSearchFocused
         }
-        .onChange(of: textFieldFocused) { newValue in
-            isSearchFocused = newValue
+        .onChange(of: textFieldFocused) {
+            isSearchFocused = textFieldFocused
         }
         .background(
             // 隐藏的快捷键处理
