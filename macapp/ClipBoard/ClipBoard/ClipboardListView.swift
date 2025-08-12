@@ -253,8 +253,9 @@ struct SearchBar: View {
             }) {
                 Image(systemName: isWindowPinned ? "pin.fill" : "pin")
                     .foregroundColor(isWindowPinned ? .blue : .gray)
-                    .font(.system(size: 16))
+                    .font(.system(size: 15))
                     .frame(width: 16, height: 16)
+                    .rotationEffect(.degrees(45))
             }
             .buttonStyle(PlainButtonStyle())
             .help(isWindowPinned ? "Unpin window" : "Pin window")
@@ -288,7 +289,7 @@ struct SearchBar: View {
             .menuIndicator(.hidden)
             .accentColor(.gray)
             .tint(.gray)
-            .frame(width: 24, height: 16)
+            .frame(width: 26, height: 16)
             .help("Sort options")
             
             // 第四个图标：显示快捷键
