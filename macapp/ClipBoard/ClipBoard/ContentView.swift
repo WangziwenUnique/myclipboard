@@ -17,6 +17,18 @@ struct ContentView: View {
         let text: String
         let shortcut: String?
         let position: CGPoint
+        
+        // 便利构造函数，根据菜单项的实际位置计算弹窗位置（真正的左对齐）
+        static func createForMenuItem(text: String, shortcut: String?, itemFrame: CGRect, sidebarWidth: CGFloat) -> GlobalTooltipData {
+            return GlobalTooltipData(
+                text: text,
+                shortcut: shortcut,
+                position: CGPoint(
+                    x: itemFrame.maxX + 6,  // 固定的左边缘位置：菜单项右侧 + 6px（更贴近菜单项）
+                    y: itemFrame.midY        // 菜单项的垂直中心位置
+                )
+            )
+        }
     }
     
     var body: some View {
@@ -29,7 +41,8 @@ struct ContentView: View {
                         selectedCategory: $selectedCategory,
                         onTooltip: { tooltipData in
                             globalTooltip = tooltipData
-                        }
+                        },
+                        sidebarWidth: geometry.size.width * 0.06
                     )
                     .frame(width: geometry.size.width * 0.06, height: geometry.size.height)
                     .background(Color.clear) // 确保背景透明以便弹窗显示
@@ -60,14 +73,28 @@ struct ContentView: View {
                 .frame(width: geometry.size.width * 0.545 - 1, height: geometry.size.height)
                 }
                 
-                // 全局弹窗层 - 显示在最顶层
+                // 全局弹窗层 - 使用HStack实现真正的左边缘对齐
                 if let tooltip = globalTooltip {
-                    CustomTooltip(text: tooltip.text, shortcut: tooltip.shortcut)
-                        .position(tooltip.position)
-                        .allowsHitTesting(false)
-                        .zIndex(1000)
+                    VStack {
+                        Spacer()
+                            .frame(height: tooltip.position.y - 14) // 垂直定位，减去弹窗高度的一半
+                        
+                        HStack {
+                            Spacer()
+                                .frame(width: tooltip.position.x) // 水平定位到左边缘位置
+                            
+                            CustomTooltip(text: tooltip.text, shortcut: tooltip.shortcut)
+                            
+                            Spacer() // 右侧自由空间
+                        }
+                        
+                        Spacer() // 底部自由空间
+                    }
+                    .allowsHitTesting(false)
+                    .zIndex(1000)
                 }
             }
+            .coordinateSpace(name: "ContentView")
         }
         .frame(minWidth: 820, minHeight: 540)
         .background(SidebarView.backgroundColor)

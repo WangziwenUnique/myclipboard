@@ -7,41 +7,35 @@ struct CustomTooltip: View {
     @State private var isVisible = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 8) {
             // 主标题
             Text(text)
                 .foregroundColor(.white)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
             
-            // 快捷键信息
+            // 快捷键信息 - 显示在同一行
             if let shortcut = shortcut {
-                HStack(spacing: 4) {
-                    Text("Shortcut:")
-                        .foregroundColor(.gray)
-                        .font(.system(size: 11, weight: .regular))
-                    
-                    Text(shortcut)
-                        .foregroundColor(.white)
-                        .font(.system(size: 11, weight: .medium))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(Color(red: 0.25, green: 0.25, blue: 0.25))
-                        )
-                }
+                Text(shortcut)
+                    .foregroundColor(.white)
+                    .font(.system(size: 10, weight: .medium))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 1)
+                    .background(
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color(red: 0.25, green: 0.25, blue: 0.25))
+                    )
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 6)
                 .fill(Color(red: 0.08, green: 0.08, blue: 0.08))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 6)
                         .stroke(Color(red: 0.3, green: 0.3, blue: 0.3), lineWidth: 0.5)
                 )
-                .shadow(color: Color.black.opacity(0.4), radius: 12, x: 2, y: 4)
+                .shadow(color: Color.black.opacity(0.4), radius: 8, x: 2, y: 2)
         )
         .opacity(isVisible ? 1 : 0)
         .scaleEffect(isVisible ? 1 : 0.85)
@@ -92,6 +86,7 @@ struct SidebarView: View {
     @ObservedObject var clipboardManager: ClipboardManager
     @Binding var selectedCategory: ClipboardCategory
     var onTooltip: ((ContentView.GlobalTooltipData?) -> Void)? = nil
+    var sidebarWidth: CGFloat = 50 // 默认宽度
     
     // 常用分类清单（不包含 history）
     private let commonCategories: [ClipboardCategory] = [.favorites, .files, .images, .links, .code, .mail]
@@ -126,7 +121,8 @@ struct SidebarView: View {
                     CategoryIconRow(
                         category: category,
                         isSelected: selectedCategory == category,
-                        onTooltip: onTooltip
+                        onTooltip: onTooltip,
+                        sidebarWidth: sidebarWidth
                     ) {
                         selectedCategory = category
                     }
@@ -139,7 +135,7 @@ struct SidebarView: View {
             // 第三部分：应用来源图标（来自现有数据的 sourceApp）
             VStack(spacing: 4) {
                 ForEach(appSourceIcons, id: \.self) { app in
-                    AppIconRow(appName: app, onTooltip: onTooltip) {
+                    AppIconRow(appName: app, onTooltip: onTooltip, sidebarWidth: sidebarWidth) {
                         selectedCategory = .history
                     }
                 }
@@ -157,64 +153,66 @@ struct CategoryIconRow: View {
     let category: ClipboardCategory
     let isSelected: Bool
     var onTooltip: ((ContentView.GlobalTooltipData?) -> Void)? = nil
+    var sidebarWidth: CGFloat = 50
     let action: () -> Void
     @State private var isHovered: Bool = false
     @State private var showTooltip: Bool = false
     
     var body: some View {
-        ZStack {
-            Button(action: action) {
-                VStack(spacing: 2) {
-                    Image(systemName: category.icon)
-                        .foregroundColor(isSelected ? .blue : (isHovered ? .white : .gray))
-                        .frame(width: 18, height: 18)
+        GeometryReader { geometry in
+            ZStack {
+                Button(action: action) {
+                    VStack(spacing: 2) {
+                        Image(systemName: category.icon)
+                            .foregroundColor(isSelected ? .blue : (isHovered ? .white : .gray))
+                            .frame(width: 18, height: 18)
+                    }
+                    .frame(width: 30, height: 30)
+                    .background(
+                        isSelected ? SidebarView.selectedBackgroundColor :
+                        (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear)
+                    )
+                    .cornerRadius(6)
                 }
-                .frame(width: 30, height: 30)
-                .background(
-                    isSelected ? SidebarView.selectedBackgroundColor :
-                    (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear)
-                )
-                .cornerRadius(6)
-            }
-            .buttonStyle(PlainButtonStyle())
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isHovered = hovering
-                }
-                
-                if hovering {
-                    // 立即显示弹窗用于调试
-                    print("Hovering over \(category.displayName)")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if isHovered {
-                            print("Showing tooltip for \(category.displayName)")
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                showTooltip = true
-                                // 使用全局弹窗回调
-                                onTooltip?(ContentView.GlobalTooltipData(
-                                    text: category.displayName,
-                                    shortcut: category.shortcut,
-                                    position: CGPoint(x: 150, y: 100)
-                                ))
+                .buttonStyle(PlainButtonStyle())
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHovered = hovering
+                    }
+                    
+                    if hovering {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            if isHovered {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    showTooltip = true
+                                    // 使用全局弹窗回调 - 根据实际菜单项位置计算
+                                    let localFrame = geometry.frame(in: .named("ContentView"))
+                                    onTooltip?(ContentView.GlobalTooltipData.createForMenuItem(
+                                        text: category.displayName,
+                                        shortcut: category.shortcut,
+                                        itemFrame: localFrame,
+                                        sidebarWidth: sidebarWidth
+                                    ))
+                                }
                             }
                         }
-                    }
-                } else {
-                    print("Stopped hovering over \(category.displayName)")
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        showTooltip = false
-                        onTooltip?(nil) // 隐藏弹窗
+                    } else {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            showTooltip = false
+                            onTooltip?(nil) // 隐藏弹窗
+                        }
                     }
                 }
             }
         }
-
+        .frame(width: 30, height: 30)
     }
 }
 
 struct AppIconRow: View {
     let appName: String
     var onTooltip: ((ContentView.GlobalTooltipData?) -> Void)? = nil
+    var sidebarWidth: CGFloat = 50
     let action: () -> Void
     @State private var isHovered: Bool = false
     @State private var showTooltip: Bool = false
@@ -233,47 +231,50 @@ struct AppIconRow: View {
     }
     
     var body: some View {
-        ZStack {
-            Button(action: action) {
-                Image(systemName: imageName)
-                    .foregroundColor(isHovered ? .white : .gray)
-                    .frame(width: 18, height: 18)
-                    .frame(width: 26, height: 26)
-                    .background(
-                        isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : SidebarView.buttonBackgroundColor
-                    )
-                    .cornerRadius(5)
-            }
-            .buttonStyle(PlainButtonStyle())
-            .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isHovered = hovering
+        GeometryReader { geometry in
+            ZStack {
+                Button(action: action) {
+                    Image(systemName: imageName)
+                        .foregroundColor(isHovered ? .white : .gray)
+                        .frame(width: 18, height: 18)
+                        .frame(width: 26, height: 26)
+                        .background(
+                            isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : SidebarView.buttonBackgroundColor
+                        )
+                        .cornerRadius(5)
                 }
-                
-                if hovering {
-                    // 减少延迟，让弹窗更快显示
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if isHovered {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                showTooltip = true
-                                // 使用全局弹窗回调
-                                onTooltip?(ContentView.GlobalTooltipData(
-                                    text: appName,
-                                    shortcut: nil,
-                                    position: CGPoint(x: 150, y: 300)
-                                ))
+                .buttonStyle(PlainButtonStyle())
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        isHovered = hovering
+                    }
+                    
+                    if hovering {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            if isHovered {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    showTooltip = true
+                                    // 使用全局弹窗回调 - 根据实际菜单项位置计算
+                                    let localFrame = geometry.frame(in: .named("ContentView"))
+                                    onTooltip?(ContentView.GlobalTooltipData.createForMenuItem(
+                                        text: appName,
+                                        shortcut: nil,
+                                        itemFrame: localFrame,
+                                        sidebarWidth: sidebarWidth
+                                    ))
+                                }
                             }
                         }
-                    }
-                } else {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        showTooltip = false
-                        onTooltip?(nil) // 隐藏弹窗
+                    } else {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            showTooltip = false
+                            onTooltip?(nil) // 隐藏弹窗
+                        }
                     }
                 }
             }
         }
-
+        .frame(width: 26, height: 26)
     }
 }
 
@@ -424,7 +425,8 @@ struct BottomControlBar: View {
     SidebarView(
         clipboardManager: ClipboardManager(),
         selectedCategory: .constant(.history),
-        onTooltip: { _ in }
+        onTooltip: { _ in },
+        sidebarWidth: 50
     )
 }
 
