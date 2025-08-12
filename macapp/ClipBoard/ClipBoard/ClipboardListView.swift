@@ -1,6 +1,91 @@
 import SwiftUI
 import AppKit
 
+struct HighlightedText: View {
+    let text: String
+    let searchText: String
+    let isSelected: Bool
+    
+    var body: some View {
+        Group {
+            if searchText.isEmpty {
+                Text(text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .foregroundColor(isSelected ? .white : .gray)
+                    .font(.system(size: 14))
+            } else {
+                // 根据选中状态调整高亮颜色，确保良好的对比度
+                let highlightColor = isSelected ? Color.yellow : Color.yellow
+                let highlightTextColor = Color.black
+                let normalColor = isSelected ? Color.white : Color.gray
+                
+                // 使用不区分大小写的搜索分割文本
+                let parts = text.components(separatedBy: .whitespacesAndNewlines).joined(separator: " ")
+                let regex = try! NSRegularExpression(pattern: NSRegularExpression.escapedPattern(for: searchText), options: .caseInsensitive)
+                let range = NSRange(location: 0, length: parts.utf16.count)
+                let matches = regex.matches(in: parts, options: [], range: range)
+                
+                if !matches.isEmpty {
+                    HStack(spacing: 0) {
+                        ForEach(createHighlightedTextParts(from: parts, matches: matches, highlightColor: highlightColor, highlightTextColor: highlightTextColor, normalColor: normalColor), id: \.id) { part in
+                            part.text
+                        }
+                    }
+                    .lineLimit(1)
+                    .font(.system(size: 14))
+                } else {
+                    Text(text)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .foregroundColor(normalColor)
+                        .font(.system(size: 14))
+                }
+            }
+        }
+    }
+    
+    private func createHighlightedTextParts(from parts: String, matches: [NSTextCheckingResult], highlightColor: Color, highlightTextColor: Color, normalColor: Color) -> [TextPart] {
+        var result: [TextPart] = []
+        var lastEnd = 0
+        
+        for match in matches {
+            // 添加匹配前的文本
+            if match.range.location > lastEnd {
+                let beforeText = String(parts[parts.index(parts.startIndex, offsetBy: lastEnd)..<parts.index(parts.startIndex, offsetBy: match.range.location)])
+                if !beforeText.isEmpty {
+                    result.append(TextPart(id: UUID(), text: AnyView(Text(beforeText).foregroundColor(normalColor))))
+                }
+            }
+            
+            // 添加高亮的匹配文本
+            let matchText = String(parts[parts.index(parts.startIndex, offsetBy: match.range.location)..<parts.index(parts.startIndex, offsetBy: match.range.location + match.range.length)])
+            result.append(TextPart(id: UUID(), text: AnyView(Text(matchText)
+                .foregroundColor(highlightTextColor)
+                .padding(.horizontal, 2)
+                .background(highlightColor)
+                .cornerRadius(2))))
+            
+            lastEnd = match.range.location + match.range.length
+        }
+        
+        // 添加剩余文本
+        if lastEnd < parts.count {
+            let remainingText = String(parts[parts.index(parts.startIndex, offsetBy: lastEnd)...])
+            if !remainingText.isEmpty {
+                result.append(TextPart(id: UUID(), text: AnyView(Text(remainingText).foregroundColor(normalColor))))
+            }
+        }
+        
+        return result
+    }
+}
+
+struct TextPart: Identifiable {
+    let id: UUID
+    let text: AnyView
+}
+
 enum SortOption: CaseIterable {
     case lastCopyTime
     case firstCopyTime
@@ -141,7 +226,8 @@ struct ClipboardListView: View {
                         ForEach(filteredItems) { item in
                             ClipboardItemRow(
                                 item: item,
-                                isSelected: selectedItem?.id == item.id
+                                isSelected: selectedItem?.id == item.id,
+                                searchText: searchText
                             ) {
                                 selectedItem = item
                             }
@@ -179,6 +265,7 @@ struct ClipboardListView: View {
 struct ClipboardItemRow: View {
     let item: ClipboardItem
     let isSelected: Bool
+    let searchText: String
     let action: () -> Void
     
     var body: some View {
@@ -190,13 +277,12 @@ struct ClipboardItemRow: View {
                     .frame(width: 24, height: 24)
                 
                 VStack(alignment: .leading, spacing: 4) {
-                    // 主要内容
-                    Text(item.displayContent)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .foregroundColor(isSelected ? .white : .gray)
-                        .font(.system(size: 14))
-
+                    // 主要内容 - 使用高亮文本组件
+                    HighlightedText(
+                        text: item.displayContent,
+                        searchText: searchText,
+                        isSelected: isSelected
+                    )
                 }
                 
                 Spacer()
