@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum SortOption: CaseIterable {
     case lastCopyTime
@@ -47,6 +48,7 @@ struct KeyboardShortcutsPopup: View {
                 ShortcutRow(key: "⌘C", description: "Copy selected item")
                 ShortcutRow(key: "⌘V", description: "Paste from clipboard")
                 ShortcutRow(key: "⌘F", description: "Focus search")
+                ShortcutRow(key: "⌘A", description: "Select all in search")
                 ShortcutRow(key: "⌘W", description: "Close window")
                 ShortcutRow(key: "⌘,", description: "Preferences")
             }
@@ -89,6 +91,7 @@ struct ClipboardListView: View {
     @Binding var isWindowPinned: Bool
     @State private var searchText = ""
     @State private var sortConfig = SortConfiguration()
+    @State private var isSearchFocused = false
     
     var filteredItems: [ClipboardItem] {
         let items = clipboardManager.getSortedItems(
@@ -114,7 +117,8 @@ struct ClipboardListView: View {
                 text: $searchText,
                 isSidebarVisible: $isSidebarVisible,
                 isWindowPinned: $isWindowPinned,
-                sortConfig: $sortConfig
+                sortConfig: $sortConfig,
+                isSearchFocused: $isSearchFocused
             )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -163,6 +167,12 @@ struct ClipboardListView: View {
             }
         }
         .background(Color(red: 0.05, green: 0.05, blue: 0.05))
+        .onAppear {
+            // 窗口显示时自动聚焦搜索框
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isSearchFocused = true
+            }
+        }
     }
 }
 
@@ -205,7 +215,9 @@ struct SearchBar: View {
     @Binding var isSidebarVisible: Bool
     @Binding var isWindowPinned: Bool
     @Binding var sortConfig: SortConfiguration
+    @Binding var isSearchFocused: Bool
     @State private var showShortcutsPopup = false
+    @FocusState private var textFieldFocused: Bool
     
     var body: some View {
         HStack(spacing: 8) {
@@ -231,6 +243,7 @@ struct SearchBar: View {
                 TextField("Type to search...", text: $text)
                     .textFieldStyle(PlainTextFieldStyle())
                     .foregroundColor(.white)
+                    .focused($textFieldFocused)
                 
                 if !text.isEmpty {
                     Button(action: { text = "" }) {
@@ -308,6 +321,29 @@ struct SearchBar: View {
             }
         }
         .padding(.horizontal, 4)
+        .onAppear {
+            // 窗口显示时自动聚焦搜索框
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                textFieldFocused = true
+            }
+        }
+        .onChange(of: isSearchFocused) { newValue in
+            textFieldFocused = newValue
+        }
+        .onChange(of: textFieldFocused) { newValue in
+            isSearchFocused = newValue
+        }
+        .background(
+            // 隐藏的快捷键处理
+            Button("") {
+                if textFieldFocused {
+                    // 全选搜索框文本
+                    NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                }
+            }
+            .keyboardShortcut("a", modifiers: .command)
+            .hidden()
+        )
     }
 }
 
@@ -366,3 +402,4 @@ struct EmptyStateView: View {
         isWindowPinned: .constant(false)
     )
 }
+

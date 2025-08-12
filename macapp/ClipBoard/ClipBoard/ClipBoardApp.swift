@@ -116,9 +116,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window?.isReleasedWhenClosed = false
         window?.delegate = self
         
-        // 设置窗口行为，确保不显示在 Dock 中
-        window?.collectionBehavior = [.transient, .ignoresCycle]
+        // 设置窗口行为，确保不显示在 Dock 中，但允许键盘输入
+        window?.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
         window?.level = .floating
+        
+        // 注意：canBecomeKey 是只读属性，通过设置窗口样式来确保可以接收键盘输入
         
         // 设置无边框窗口的额外属性
         window?.backgroundColor = NSColor.clear
@@ -214,6 +216,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // 先激活应用，确保第一次点击即可聚焦输入框
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+            
+            // 确保窗口能够接收键盘输入
+            window.makeFirstResponder(window.contentView)
         }
     }
     
