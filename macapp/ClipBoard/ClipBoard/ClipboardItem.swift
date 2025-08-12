@@ -20,18 +20,22 @@ struct ClipboardItem: Identifiable, Hashable {
     }
     
     var displayContent: String {
+        let processedContent: String
         switch type {
         case .text:
-            return content
+            processedContent = content
         case .image:
-            return "Image (\(content))"
+            processedContent = "Image (\(content))"
         case .link:
-            return content
+            processedContent = content
         case .file:
-            return "File: \(content)"
+            processedContent = "File: \(content)"
         case .code:
-            return content
+            processedContent = content
         }
+        
+        // Replace newlines with line break symbols (↵)
+        return processedContent.replacingOccurrences(of: "\n", with: " ↵ ")
     }
     
     var icon: String {

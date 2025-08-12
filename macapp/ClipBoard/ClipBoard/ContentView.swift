@@ -12,6 +12,8 @@ struct ContentView: View {
     @StateObject private var clipboardManager = ClipboardManager()
     @State private var selectedCategory: ClipboardCategory = .history
     @State private var globalTooltip: GlobalTooltipData? = nil
+    @State private var isSidebarVisible: Bool = true
+    @State private var isWindowPinned: Bool = false
     
     struct GlobalTooltipData {
         let text: String
@@ -35,42 +37,55 @@ struct ContentView: View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
                 HStack(spacing: 0) {
-                    // 左侧边栏 - 缩小为总宽度的 6%
-                    SidebarView(
-                        clipboardManager: clipboardManager, 
-                        selectedCategory: $selectedCategory,
-                        onTooltip: { tooltipData in
-                            globalTooltip = tooltipData
-                        },
-                        sidebarWidth: geometry.size.width * 0.06
+                    // 左侧边栏 - 可隐藏
+                    if isSidebarVisible {
+                        SidebarView(
+                            clipboardManager: clipboardManager, 
+                            selectedCategory: $selectedCategory,
+                            onTooltip: { tooltipData in
+                                globalTooltip = tooltipData
+                            },
+                            sidebarWidth: geometry.size.width * 0.06
+                        )
+                        .frame(width: geometry.size.width * 0.06, height: geometry.size.height)
+                        .background(Color.clear) // 确保背景透明以便弹窗显示
+                        .transition(.move(edge: .leading))
+                    
+                        // 分割线 1
+                        Rectangle()
+                            .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
+                            .frame(width: 0.5, height: geometry.size.height)
+                    }
+                
+                    // 中间列表视图 - 动态调整宽度
+                    let listWidth = isSidebarVisible ? 
+                        (geometry.size.width * 0.94) / 2 - 1 : 
+                        geometry.size.width / 2 - 0.25
+                    
+                    ClipboardListView(
+                        clipboardManager: clipboardManager,
+                        selectedItem: $clipboardManager.selectedItem,
+                        category: selectedCategory,
+                        isSidebarVisible: $isSidebarVisible,
+                        isWindowPinned: $isWindowPinned
                     )
-                    .frame(width: geometry.size.width * 0.06, height: geometry.size.height)
-                    .background(Color.clear) // 确保背景透明以便弹窗显示
-                
-                // 分割线 1
-                Rectangle()
-                    .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
-                    .frame(width: 0.5, height: geometry.size.height)
-                
-                // 中间列表视图 - 占总宽度的 39.5%（将左栏缩小的比例加到这里）
-                ClipboardListView(
-                    clipboardManager: clipboardManager,
-                    selectedItem: $clipboardManager.selectedItem,
-                    category: selectedCategory
-                )
-                .frame(width: geometry.size.width * 0.395 - 1, height: geometry.size.height)
-                
-                // 分割线 2
-                Rectangle()
-                    .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
-                    .frame(width: 0.5, height: geometry.size.height)
-                
-                // 右侧详情视图 - 占总宽度的 54.5%
-                DetailView(
-                    clipboardManager: clipboardManager,
-                    selectedItem: clipboardManager.selectedItem
-                )
-                .frame(width: geometry.size.width * 0.545 - 1, height: geometry.size.height)
+                    .frame(width: listWidth, height: geometry.size.height)
+                    
+                    // 分割线 2
+                    Rectangle()
+                        .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
+                        .frame(width: 0.5, height: geometry.size.height)
+                    
+                    // 右侧详情视图 - 动态调整宽度
+                    let detailWidth = isSidebarVisible ? 
+                        (geometry.size.width * 0.94) / 2 - 1 : 
+                        geometry.size.width / 2 - 0.25
+                    
+                    DetailView(
+                        clipboardManager: clipboardManager,
+                        selectedItem: clipboardManager.selectedItem
+                    )
+                    .frame(width: detailWidth, height: geometry.size.height)
                 }
                 
                 // 全局弹窗层 - 使用HStack实现真正的左边缘对齐

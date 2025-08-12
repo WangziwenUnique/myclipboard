@@ -1,13 +1,102 @@
 import SwiftUI
 
+enum SortOption: CaseIterable {
+    case lastCopyTime
+    case firstCopyTime
+    case numberOfCopies
+    case size
+    
+    var displayName: String {
+        switch self {
+        case .lastCopyTime: return "Last Copy Time"
+        case .firstCopyTime: return "First Copy Time"
+        case .numberOfCopies: return "Number of Copies"
+        case .size: return "Size"
+        }
+    }
+}
+
+struct SortConfiguration {
+    var option: SortOption = .lastCopyTime
+    var isReversed: Bool = false
+    
+    mutating func toggleReverse() {
+        isReversed.toggle()
+    }
+}
+
+struct KeyboardShortcutsPopup: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Keyboard Shortcuts")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.bottom, 4)
+            
+            Group {
+                ShortcutRow(key: "⌘1", description: "History")
+                ShortcutRow(key: "⌘2", description: "Favorites")
+                ShortcutRow(key: "⌘3", description: "Files")
+                ShortcutRow(key: "⌘4", description: "Images")
+                ShortcutRow(key: "⌘5", description: "Links")
+                ShortcutRow(key: "⌘6", description: "Code")
+                ShortcutRow(key: "⌘7", description: "Mail")
+                
+                Divider().background(Color.gray)
+                
+                ShortcutRow(key: "⌘C", description: "Copy selected item")
+                ShortcutRow(key: "⌘V", description: "Paste from clipboard")
+                ShortcutRow(key: "⌘F", description: "Focus search")
+                ShortcutRow(key: "⌘W", description: "Close window")
+                ShortcutRow(key: "⌘,", description: "Preferences")
+            }
+        }
+        .padding(16)
+        .background(Color(red: 0.12, green: 0.12, blue: 0.12))
+        .cornerRadius(8)
+        .frame(width: 240)
+    }
+}
+
+struct ShortcutRow: View {
+    let key: String
+    let description: String
+    
+    var body: some View {
+        HStack {
+            Text(key)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundColor(.white)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color(red: 0.25, green: 0.25, blue: 0.25))
+                .cornerRadius(4)
+            
+            Text(description)
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            
+            Spacer()
+        }
+    }
+}
+
 struct ClipboardListView: View {
     @ObservedObject var clipboardManager: ClipboardManager
     @Binding var selectedItem: ClipboardItem?
     let category: ClipboardCategory
+    @Binding var isSidebarVisible: Bool
+    @Binding var isWindowPinned: Bool
     @State private var searchText = ""
+    @State private var sortConfig = SortConfiguration()
     
     var filteredItems: [ClipboardItem] {
-        let items = clipboardManager.getItemsByCategory(category)
+        let items = clipboardManager.getSortedItems(
+            for: category, 
+            sortOption: sortConfig.option, 
+            isReversed: sortConfig.isReversed
+        )
+        
         if searchText.isEmpty {
             return items
         } else {
@@ -21,7 +110,12 @@ struct ClipboardListView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Search bar at the top
-            SearchBar(text: $searchText)
+            SearchBar(
+                text: $searchText,
+                isSidebarVisible: $isSidebarVisible,
+                isWindowPinned: $isWindowPinned,
+                sortConfig: $sortConfig
+            )
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .background(SidebarView.backgroundColor)
@@ -88,52 +182,14 @@ struct ClipboardItemRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // 主要内容
                     Text(item.displayContent)
-                        .lineLimit(3)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                         .foregroundColor(isSelected ? .white : .gray)
-                        .multilineTextAlignment(.leading)
                         .font(.system(size: 14))
-                    
-                    // 元数据
-                    HStack(spacing: 8) {
-                        Text(item.sourceApp)
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
-                        
-                        Text("•")
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
-                        
-                        Text(item.timestamp, style: .relative)
-                            .font(.system(size: 11))
-                            .foregroundColor(.gray)
-                        
-                        if item.isFavorite {
-                            Image(systemName: "star.fill")
-                                .foregroundColor(.yellow)
-                                .font(.system(size: 10))
-                        }
-                    }
+
                 }
                 
                 Spacer()
-                
-                VStack(spacing: 4) {
-                    // 类型标签
-                    Text(item.type.rawValue)
-                        .font(.system(size: 10))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.gray.opacity(0.3))
-                        .foregroundColor(.white)
-                        .cornerRadius(3)
-                    
-                    // 图片尺寸信息（如果是图片）
-                    if item.type == .image {
-                        Text("3570x1066")
-                            .font(.system(size: 10))
-                            .foregroundColor(.gray)
-                    }
-                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -146,28 +202,111 @@ struct ClipboardItemRow: View {
 
 struct SearchBar: View {
     @Binding var text: String
+    @Binding var isSidebarVisible: Bool
+    @Binding var isWindowPinned: Bool
+    @Binding var sortConfig: SortConfiguration
+    @State private var showShortcutsPopup = false
     
     var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.gray)
+        HStack(spacing: 8) {
+            // 第一个图标：控制左侧菜单隐藏 - 强制显示
+            Button(action: {
+                isSidebarVisible.toggle()
+            }) {
+                Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.right")
+                    .foregroundColor(.gray)
+                    .font(.system(size: 16))
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Toggle sidebar")
             
-            TextField("Type to search...", text: $text)
-                .textFieldStyle(PlainTextFieldStyle())
-                .foregroundColor(.white)
-            
-            if !text.isEmpty {
-                Button(action: { text = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.gray)
+            // 搜索框 - 背景色与父容器相同
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.gray)
+                    .font(.system(size: 16))
+                    .frame(width: 16, height: 16)
+                
+                TextField("Type to search...", text: $text)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .foregroundColor(.white)
+                
+                if !text.isEmpty {
+                    Button(action: { text = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.gray)
+                            .font(.system(size: 16))
+                            .frame(width: 16, height: 16)
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color(red: 0.05, green: 0.05, blue: 0.05)) // 与父容器背景相同
+            .cornerRadius(8)
+            
+            // 第二个图标：控制窗口固定
+            Button(action: {
+                isWindowPinned.toggle()
+            }) {
+                Image(systemName: isWindowPinned ? "pin.fill" : "pin")
+                    .foregroundColor(isWindowPinned ? .blue : .gray)
+                    .font(.system(size: 16))
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help(isWindowPinned ? "Unpin window" : "Pin window")
+            
+            // 第三个图标：排序选项
+            Menu {
+                Button("Last Copy Time") {
+                    sortConfig.option = .lastCopyTime
+                }
+                Button("First Copy Time") {
+                    sortConfig.option = .firstCopyTime
+                }
+                Button("Number of Copies") {
+                    sortConfig.option = .numberOfCopies
+                }
+                Button("Size") {
+                    sortConfig.option = .size
+                }
+                Divider()
+                Button(sortConfig.isReversed ? "Normal Order" : "Reverse Order") {
+                    sortConfig.toggleReverse()
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .foregroundColor(.gray)
+                    .font(.system(size: 16))
+                    .frame(width: 24, height: 16)
+            }
+            .menuStyle(BorderlessButtonMenuStyle())
+            .buttonStyle(PlainButtonStyle())
+            .menuIndicator(.hidden)
+            .accentColor(.gray)
+            .tint(.gray)
+            .frame(width: 24, height: 16)
+            .help("Sort options")
+            
+            // 第四个图标：显示快捷键
+            Button(action: {
+                showShortcutsPopup.toggle()
+            }) {
+                Image(systemName: "keyboard")
+                    .foregroundColor(.gray)
+                    .font(.system(size: 16))
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(PlainButtonStyle())
+            .help("Show keyboard shortcuts")
+            .popover(isPresented: $showShortcutsPopup, arrowEdge: .bottom) {
+                KeyboardShortcutsPopup()
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(SidebarView.buttonBackgroundColor)
-        .cornerRadius(8)
+        .padding(.horizontal, 4)
     }
 }
 
@@ -221,6 +360,8 @@ struct EmptyStateView: View {
     ClipboardListView(
         clipboardManager: ClipboardManager(),
         selectedItem: .constant(nil),
-        category: .history
+        category: .history,
+        isSidebarVisible: .constant(true),
+        isWindowPinned: .constant(false)
     )
 }

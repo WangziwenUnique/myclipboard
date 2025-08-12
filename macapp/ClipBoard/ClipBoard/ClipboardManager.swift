@@ -132,10 +132,51 @@ class ClipboardManager: ObservableObject {
         }
     }
     
+    func getSortedItems(for category: ClipboardCategory, sortOption: SortOption, isReversed: Bool = false) -> [ClipboardItem] {
+        let items = getItemsByCategory(category)
+        let sortedItems: [ClipboardItem]
+        
+        switch sortOption {
+        case .lastCopyTime:
+            sortedItems = items.sorted { $0.timestamp > $1.timestamp }
+        case .firstCopyTime:
+            sortedItems = items.sorted { $0.timestamp < $1.timestamp }
+        case .numberOfCopies:
+            // For numberOfCopies, we'll use a simple heuristic based on content similarity
+            // In a real implementation, you'd track actual copy counts
+            sortedItems = items.sorted { item1, item2 in
+                let count1 = items.filter { $0.content.prefix(50) == item1.content.prefix(50) }.count
+                let count2 = items.filter { $0.content.prefix(50) == item2.content.prefix(50) }.count
+                return count1 > count2
+            }
+        case .size:
+            sortedItems = items.sorted { $0.content.count > $1.content.count }
+        }
+        
+        return isReversed ? sortedItems.reversed() : sortedItems
+    }
+    
     private func loadSampleData() {
         let sampleItems = [
             ClipboardItem(content: "LAIS-9074-5758-1212-0858427276105608", sourceApp: "Xcode"),
-            ClipboardItem(content: "SwiftUI", sourceApp: "Xcode"),
+            ClipboardItem(content: """
+{
+    "l1": {
+        "l1_1": [
+            "l1_1_1",
+            "l1_1_2"
+        ],
+        "l1_2": {
+            "l1_2_1": 121
+        }
+    },
+    "l2": {
+        "l2_1": null,
+        "l2_2": true,
+        "l2_3": {}
+    }
+}
+""", sourceApp: "Xcode"),
             ClipboardItem(content: "https://myclipboard.org/", type: .link, sourceApp: "Safari"),
             ClipboardItem(content: "Feature:", sourceApp: "Xcode"),
             ClipboardItem(content: "相似问检索...", sourceApp: "Notes"),
