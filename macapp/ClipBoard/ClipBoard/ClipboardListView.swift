@@ -206,7 +206,7 @@ struct ClipboardListView: View {
                 isSearchFocused: $isSearchFocused
             )
                 .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.vertical, 8)
                 .background(SidebarView.backgroundColor)
             
             // Separator line
@@ -248,6 +248,7 @@ struct ClipboardListView: View {
                             }
                         }
                     }
+                    .padding(.horizontal, 12)
                     .padding(.vertical, 8)
                 }
             }
@@ -269,30 +270,33 @@ struct ClipboardItemRow: View {
     let action: () -> Void
     
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                // 项目图标
-                Image(systemName: item.icon)
-                    .foregroundColor(isSelected ? .blue : .gray)
-                    .frame(width: 24, height: 24)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    // 主要内容 - 使用高亮文本组件
-                    HighlightedText(
-                        text: item.displayContent,
-                        searchText: searchText,
-                        isSelected: isSelected
-                    )
-                }
-                
-                Spacer()
+        HStack(spacing: 12) {
+            // 项目图标
+            Image(systemName: item.icon)
+                .foregroundColor(isSelected ? .blue : .gray)
+                .frame(width: 24, height: 24)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                // 主要内容 - 使用高亮文本组件
+                HighlightedText(
+                    text: item.displayContent,
+                    searchText: searchText,
+                    isSelected: isSelected
+                )
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(isSelected ? SidebarView.selectedBackgroundColor : Color.clear)
-            .cornerRadius(8)
+            
+            Spacer()
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isSelected ? SidebarView.selectedBackgroundColor : Color.clear)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            action()
+        }
     }
 }
 
@@ -306,20 +310,20 @@ struct SearchBar: View {
     @FocusState private var textFieldFocused: Bool
     
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             // 第一个图标：控制左侧菜单隐藏 - 强制显示
             Button(action: {
                 isSidebarVisible.toggle()
             }) {
                 Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.right")
                     .foregroundColor(.gray)
-                    .font(.system(size: 16))
-                    .frame(width: 16, height: 16)
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 20, height: 20)
             }
             .buttonStyle(PlainButtonStyle())
             .help("Toggle sidebar")
             
-            // 搜索框 - 背景色与父容器相同
+            // 搜索框 - 增强视觉层次
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.gray)
@@ -342,9 +346,9 @@ struct SearchBar: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color(red: 0.05, green: 0.05, blue: 0.05)) // 与父容器背景相同
-            .cornerRadius(8)
+            .padding(.vertical, 6)
+            .background(SidebarView.backgroundColor)
+            .cornerRadius(12)
             
             // 第二个图标：控制窗口固定
             Button(action: {
@@ -352,8 +356,8 @@ struct SearchBar: View {
             }) {
                 Image(systemName: isWindowPinned ? "pin.fill" : "pin")
                     .foregroundColor(isWindowPinned ? .blue : .gray)
-                    .font(.system(size: 15))
-                    .frame(width: 16, height: 16)
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 20, height: 20)
                     .rotationEffect(.degrees(45))
             }
             .buttonStyle(PlainButtonStyle())
@@ -380,15 +384,15 @@ struct SearchBar: View {
             } label: {
                 Image(systemName: "arrow.up.arrow.down")
                     .foregroundColor(.gray)
-                    .font(.system(size: 16))
-                    .frame(width: 24, height: 16)
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 20, height: 20)
             }
             .menuStyle(BorderlessButtonMenuStyle())
             .buttonStyle(PlainButtonStyle())
             .menuIndicator(.hidden)
             .accentColor(.gray)
             .tint(.gray)
-            .frame(width: 26, height: 16)
+            .frame(width: 20, height: 20)
             .help("Sort options")
             
             // 第四个图标：显示快捷键
@@ -397,8 +401,8 @@ struct SearchBar: View {
             }) {
                 Image(systemName: "keyboard")
                     .foregroundColor(.gray)
-                    .font(.system(size: 16))
-                    .frame(width: 16, height: 16)
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 20, height: 20)
             }
             .buttonStyle(PlainButtonStyle())
             .help("Show keyboard shortcuts")
