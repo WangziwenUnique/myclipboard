@@ -1,8 +1,8 @@
 import Foundation
 import SwiftUI
 
-struct ClipboardItem: Identifiable, Hashable {
-    let id = UUID()
+struct ClipboardItem: Identifiable, Hashable, Codable {
+    let id: UUID
     let content: String
     let type: ClipboardItemType
     let timestamp: Date
@@ -10,13 +10,22 @@ struct ClipboardItem: Identifiable, Hashable {
     var isFavorite: Bool
     let htmlContent: String?
     
-    init(content: String, type: ClipboardItemType = .text, sourceApp: String = "Unknown", htmlContent: String? = nil, isFavorite: Bool = false) {
+    // 图片相关数据
+    let imageData: Data?        // Base64 编码的图片数据
+    let imageDimensions: String? // 图片尺寸信息
+    let imageSize: Int64?       // 图片文件大小
+    
+    init(content: String, type: ClipboardItemType = .text, sourceApp: String = "Unknown", htmlContent: String? = nil, isFavorite: Bool = false, imageData: Data? = nil, imageDimensions: String? = nil, imageSize: Int64? = nil) {
+        self.id = UUID()
         self.content = content
         self.type = type
         self.timestamp = Date()
         self.sourceApp = sourceApp
         self.isFavorite = isFavorite
         self.htmlContent = htmlContent
+        self.imageData = imageData
+        self.imageDimensions = imageDimensions
+        self.imageSize = imageSize
     }
     
     var displayContent: String {
@@ -25,7 +34,12 @@ struct ClipboardItem: Identifiable, Hashable {
         case .text:
             processedContent = content
         case .image:
-            processedContent = "Image (\(content))"
+            if let dimensions = imageDimensions, let size = imageSize {
+                let sizeStr = formatBytes(size)
+                processedContent = "Image (\(dimensions), \(sizeStr))"
+            } else {
+                processedContent = "Image (\(content))"
+            }
         case .link:
             processedContent = content
         case .file:
@@ -36,6 +50,13 @@ struct ClipboardItem: Identifiable, Hashable {
         
         // Replace newlines with line break symbols (↵)
         return processedContent.replacingOccurrences(of: "\n", with: " ↵ ")
+    }
+    
+    // \u683c\u5f0f\u5316\u5b57\u8282\u6570
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
     
     var icon: String {
@@ -58,7 +79,7 @@ struct ClipboardItem: Identifiable, Hashable {
     }
 }
 
-enum ClipboardItemType: String, CaseIterable {
+enum ClipboardItemType: String, CaseIterable, Codable {
     case text = "Text"
     case image = "Image"
     case link = "Link"

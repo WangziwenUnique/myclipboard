@@ -52,7 +52,7 @@ struct DetailToolbar: View {
                         .font(.system(size: 12))
                         .foregroundColor(.gray)
                     
-                    Text("Feishu Helper")
+                    Text(item.sourceApp)
                         .font(.system(size: 12))
                         .foregroundColor(.white)
                 }
@@ -73,7 +73,11 @@ struct DetailToolbar: View {
                     
                     // 复制按钮
                     Button(action: {
-                        clipboardManager.copyToClipboard(item.content)
+                        if item.type == .image, let imageData = item.imageData {
+                            clipboardManager.copyImageToClipboard(imageData)
+                        } else {
+                            clipboardManager.copyToClipboard(item.content)
+                        }
                     }) {
                         Image(systemName: "doc.on.doc")
                             .foregroundColor(.gray)
@@ -114,32 +118,67 @@ struct ImageContentView: View {
     let item: ClipboardItem
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                // 图片预览区域
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(red: 0.12, green: 0.12, blue: 0.12))
-                    .frame(height: 300)
-                    .overlay(
-                        VStack(spacing: 12) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 48))
-                                .foregroundColor(.gray)
-                            
-                            Text("Image Preview")
-                                .foregroundColor(.gray)
-                                .font(.system(size: 14))
-                            
-                            Text("3570 x 1066")
-                                .foregroundColor(.gray)
-                                .font(.system(size: 12))
-                        }
-                    )
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
+        GeometryReader { geometry in
+            ScrollView([.horizontal, .vertical]) {
+                VStack(spacing: 16) {
+                    imagePreviewContent(geometry: geometry)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                }
             }
         }
         .background(SidebarView.backgroundColor)
+    }
+    
+    @ViewBuilder
+    private func imagePreviewContent(geometry: GeometryProxy) -> some View {
+        if let imageData = item.imageData,
+           let nsImage = NSImage(data: imageData) {
+            actualImageView(nsImage: nsImage, geometry: geometry)
+        } else {
+            placeholderImageView(geometry: geometry)
+        }
+    }
+    
+    private func actualImageView(nsImage: NSImage, geometry: GeometryProxy) -> some View {
+        let maxWidth = geometry.size.width - 32
+        let maxHeight = max(400, geometry.size.height - 100)
+        
+        return Image(nsImage: nsImage)
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(maxWidth: maxWidth, maxHeight: maxHeight)
+            .cornerRadius(8)
+            .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+    }
+    
+    private func placeholderImageView(geometry: GeometryProxy) -> some View {
+        let maxWidth = geometry.size.width - 32
+        let maxHeight = min(400, max(300, geometry.size.height - 100))
+        
+        return RoundedRectangle(cornerRadius: 8)
+            .fill(Color(red: 0.12, green: 0.12, blue: 0.12))
+            .frame(maxWidth: maxWidth, maxHeight: maxHeight)
+            .overlay(placeholderContent)
+    }
+    
+    private var placeholderContent: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "photo")
+                .font(.system(size: 48))
+                .foregroundColor(.gray)
+            
+            Text("Image Preview")
+                .foregroundColor(.gray)
+                .font(.system(size: 14))
+            
+            if let dimensions = item.imageDimensions {
+                Text(dimensions)
+                    .foregroundColor(.gray)
+                    .font(.system(size: 12))
+            }
+        }
     }
 }
 
@@ -228,7 +267,7 @@ struct MetadataView: View {
                         
                         Spacer()
                         
-                        Text("3570x1066")
+                        Text(item.imageDimensions ?? "Unknown")
                             .font(.system(size: 12))
                             .foregroundColor(.white)
                     }
@@ -240,7 +279,7 @@ struct MetadataView: View {
                         
                         Spacer()
                         
-                        Text("527.76 KB")
+                        Text(formatImageSize(item.imageSize))
                             .font(.system(size: 12))
                             .foregroundColor(.white)
                     }
@@ -269,6 +308,13 @@ struct MetadataView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d, yyyy, h:mm:ss a"
         return formatter
+    }
+    
+    private func formatImageSize(_ size: Int64?) -> String {
+        guard let size = size else { return "Unknown" }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: size)
     }
 }
 
