@@ -174,9 +174,9 @@ class ClipboardManager: ObservableObject {
         }
     }
     
-    // 尝试获取图片的真实文件大小（用于显示）
+    // 获取图片的估算文件大小（用于显示）
     private func getRealImageSize(imageData: Data, pasteboard: NSPasteboard) -> Int64 {
-        // 方法1: 尝试从剪贴板获取文件URL
+        // 方法1: 尝试从剪贴板获取文件URL（文件复制的情况）
         if let fileURL = getFileURLFromPasteboard(pasteboard: pasteboard) {
             do {
                 let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
@@ -188,34 +188,137 @@ class ClipboardManager: ObservableObject {
             }
         }
         
-        // 方法2: 尝试将图片重新编码为JPEG估算压缩后大小
-        if let nsImage = NSImage(data: imageData),
-           let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) {
-            
-            let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
-            if let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: 0.8]) {
-                return Int64(jpegData.count)
+        // 方法2: 判断是否为截图，如果是则估算压缩后的文件大小
+        if isLikelyScreenshot(pasteboard: pasteboard, imageData: imageData) {
+            return estimateCompressedImageSize(imageData: imageData)
+        }
+        
+        // 方法3: 其他情况 - 使用适度的压缩估算
+        return estimateCompressedImageSize(imageData: imageData, useHigherCompression: false)
+    }
+    
+    // 判断是否可能是截图
+    private func isLikelyScreenshot(pasteboard: NSPasteboard, imageData: Data) -> Bool {
+        // 检查1: 来源应用是否为截图相关
+        let sourceApp = getCurrentSourceApp()
+        let screenshotApps = ["System UI Server", "Screenshot", "CleanShot X", "System Preferences", "Finder"]
+        if screenshotApps.contains(sourceApp) {
+            return true
+        }
+        
+        // 检查2: 数据大小特征（截图通常在剪贴板中是未压缩的，会比较大）
+        let dataSizeKB = imageData.count / 1024
+        if dataSizeKB > 500 { // 大于500KB可能是未压缩的截图
+            // 检查3: 是否有文件URL，如果没有且数据很大，很可能是截图
+            if getFileURLFromPasteboard(pasteboard: pasteboard) == nil {
+                return true
             }
         }
         
-        // 方法3: 后备方案 - 返回内存中的位图大小
-        return Int64(imageData.count)
+        return false
+    }
+    
+    // 精确估算压缩后的图片文件大小（复现macOS保存流程）
+    private func estimateCompressedImageSize(imageData: Data, useHigherCompression: Bool = true) -> Int64 {
+        guard let nsImage = NSImage(data: imageData),
+              let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            // 如果无法解析图片，返回原始数据大小的一个合理比例
+            return Int64(Double(imageData.count) * 0.1)
+        }
+        
+        // 对截图使用精确的PNG压缩（复现系统保存）
+        if useHigherCompression {
+            if let accuratePngSize = estimateSystemLikePngSize(cgImage: cgImage) {
+                return accuratePngSize
+            }
+        }
+        
+        // 备用方案：使用JPEG压缩估算
+        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+        let compressionFactor: Float = useHigherCompression ? 0.7 : 0.8
+        if let jpegData = bitmapRep.representation(using: .jpeg, properties: [.compressionFactor: compressionFactor]) {
+            return Int64(jpegData.count)
+        }
+        
+        // 最后的备用方案：基于经验的估算
+        return Int64(Double(imageData.count) * 0.1)
+    }
+    
+    // 精确复现macOS系统PNG保存的大小估算
+    private func estimateSystemLikePngSize(cgImage: CGImage) -> Int64? {
+        // 创建正确配置的NSBitmapImageRep
+        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+        
+        // 配置PNG属性，复现系统保存参数
+        let pngProperties: [NSBitmapImageRep.PropertyKey: Any] = [
+            // PNG interlacing（系统通常禁用以减小文件大小）
+            .interlaced: false
+        ]
+        
+        // 生成PNG数据
+        if let pngData = bitmapRep.representation(using: .png, properties: pngProperties) {
+            var estimatedSize = Int64(pngData.count)
+            
+            // 添加系统PNG元数据的估算大小
+            estimatedSize += estimatePngMetadataSize(width: cgImage.width, height: cgImage.height)
+            
+            return estimatedSize
+        }
+        
+        return nil
+    }
+    
+    // 估算PNG元数据大小（时间戳、软件信息等）
+    private func estimatePngMetadataSize(width: Int, height: Int) -> Int64 {
+        var metadataSize: Int64 = 0
+        
+        // sRGB颜色配置文件 chunk
+        metadataSize += 3144 // 标准sRGB配置文件大小
+        
+        // tEXt chunks（文本元数据）
+        metadataSize += 50   // 创建时间
+        metadataSize += 30   // 软件信息
+        metadataSize += 20   // 其他标准元数据
+        
+        // pHYs chunk（物理像素尺寸）
+        metadataSize += 21
+        
+        // bKGD chunk（背景色，如果有的话）
+        metadataSize += 15
+        
+        // chunk头部开销
+        metadataSize += 80   // 各种chunk的头部和CRC
+        
+        return metadataSize
     }
     
     // 尝试从剪贴板获取文件URL
     private func getFileURLFromPasteboard(pasteboard: NSPasteboard) -> URL? {
-        // 检查是否有文件URL类型
+        // 方法1: 检查文件URL类型
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] {
             for url in urls {
                 if url.isFileURL {
                     let pathExtension = url.pathExtension.lowercased()
                     // 检查是否是图片文件
-                    if ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"].contains(pathExtension) {
+                    if ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp", "heic", "heif"].contains(pathExtension) {
                         return url
                     }
                 }
             }
         }
+        
+        // 方法2: 检查文件URL字符串类型
+        if let fileURLs = pasteboard.propertyList(forType: .fileURL) as? [String] {
+            for urlString in fileURLs {
+                if let url = URL(string: urlString), url.isFileURL {
+                    let pathExtension = url.pathExtension.lowercased()
+                    if ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp", "heic", "heif"].contains(pathExtension) {
+                        return url
+                    }
+                }
+            }
+        }
+        
         return nil
     }
     
