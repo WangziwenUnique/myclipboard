@@ -192,7 +192,7 @@ struct TextContentView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text(item.content)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(size: 12, design: .monospaced))
                     .foregroundColor(.white)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -226,7 +226,7 @@ struct HTMLContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let htmlContent = item.htmlContent {
                     Text(htmlContent)
-                        .font(.system(.body, design: .monospaced))
+                        .font(.system(size: 12, design: .monospaced))
                         .foregroundColor(.primary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)

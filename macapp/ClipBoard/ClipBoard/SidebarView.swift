@@ -187,7 +187,7 @@ struct SidebarView: View {
                             .foregroundColor(.gray)
                             .frame(width: 14, height: 14)
                             .frame(width: 26, height: 20)
-                            .background(SidebarView.buttonBackgroundColor)
+                            .background(Color.clear)
                             .cornerRadius(4)
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -301,7 +301,7 @@ struct AppIconRow: View {
                             .frame(width: 26, height: 26)
                             .background(
                                 isSelected ? SidebarView.selectedBackgroundColor :
-                                (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : SidebarView.buttonBackgroundColor)
+                                (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear)
                             )
                             .cornerRadius(5)
                     } else {
@@ -312,7 +312,7 @@ struct AppIconRow: View {
                             .frame(width: 26, height: 26)
                             .background(
                                 isSelected ? SidebarView.selectedBackgroundColor :
-                                (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : SidebarView.buttonBackgroundColor)
+                                (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear)
                             )
                             .cornerRadius(5)
                     }

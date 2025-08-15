@@ -445,17 +445,11 @@ class ClipboardManager: ObservableObject {
         
         switch sortOption {
         case .lastCopyTime:
-            sortedItems = items.sorted { $0.timestamp > $1.timestamp }
+            sortedItems = items.sorted { $0.lastCopyTime > $1.lastCopyTime }
         case .firstCopyTime:
-            sortedItems = items.sorted { $0.timestamp < $1.timestamp }
+            sortedItems = items.sorted { $0.firstCopyTime < $1.firstCopyTime }
         case .numberOfCopies:
-            // For numberOfCopies, we'll use a simple heuristic based on content similarity
-            // In a real implementation, you'd track actual copy counts
-            sortedItems = items.sorted { item1, item2 in
-                let count1 = items.filter { $0.content.prefix(50) == item1.content.prefix(50) }.count
-                let count2 = items.filter { $0.content.prefix(50) == item2.content.prefix(50) }.count
-                return count1 > count2
-            }
+            sortedItems = items.sorted { $0.copyCount > $1.copyCount }
         case .size:
             sortedItems = items.sorted { $0.content.count > $1.content.count }
         }

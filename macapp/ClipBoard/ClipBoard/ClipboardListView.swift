@@ -13,7 +13,7 @@ struct HighlightedText: View {
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .foregroundColor(isSelected ? .white : .gray)
-                    .font(.system(size: 14))
+                    .font(.system(size: 12))
             } else {
                 // 根据选中状态调整高亮颜色，确保良好的对比度
                 let highlightColor = isSelected ? Color.yellow : Color.yellow
@@ -33,13 +33,13 @@ struct HighlightedText: View {
                         }
                     }
                     .lineLimit(1)
-                    .font(.system(size: 14))
+                    .font(.system(size: 12))
                 } else {
                     Text(text)
                         .lineLimit(1)
                         .truncationMode(.tail)
                         .foregroundColor(normalColor)
-                        .font(.system(size: 14))
+                        .font(.system(size: 12))
                 }
             }
         }
@@ -232,7 +232,7 @@ struct ClipboardListView: View {
                 }
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 1) {
                         ForEach(filteredItems) { item in
                             ClipboardItemRow(
                                 item: item,
@@ -258,12 +258,12 @@ struct ClipboardListView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 8)
                 }
             }
         }
-        .background(Color(red: 0.05, green: 0.05, blue: 0.05))
+        .background(SidebarView.backgroundColor)
         .onAppear {
             // 窗口显示时自动聚焦搜索框
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -278,13 +278,14 @@ struct ClipboardItemRow: View {
     let isSelected: Bool
     let searchText: String
     let action: () -> Void
+    @State private var isHovered: Bool = false
     
     var body: some View {
         HStack(spacing: 12) {
             // 项目图标
             Image(systemName: item.icon)
                 .foregroundColor(isSelected ? .blue : .gray)
-                .frame(width: 24, height: 24)
+                .frame(width: 20, height: 20)
             
             VStack(alignment: .leading, spacing: 4) {
                 // 主要内容 - 使用高亮文本组件
@@ -298,14 +299,20 @@ struct ClipboardItemRow: View {
             Spacer()
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? SidebarView.selectedBackgroundColor : Color.clear)
+                .fill(isSelected ? SidebarView.selectedBackgroundColor : 
+                      (isHovered ? Color(red: 0.18, green: 0.18, blue: 0.18) : Color.clear))
         )
         .contentShape(Rectangle())
         .onTapGesture {
             action()
+        }
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
         }
     }
 }
@@ -466,7 +473,7 @@ struct SearchEmptyStateView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.05, green: 0.05, blue: 0.05))
+        .background(SidebarView.backgroundColor)
     }
 }
 
@@ -489,7 +496,7 @@ struct EmptyStateView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(red: 0.05, green: 0.05, blue: 0.05))
+        .background(SidebarView.backgroundColor)
     }
 }
 
