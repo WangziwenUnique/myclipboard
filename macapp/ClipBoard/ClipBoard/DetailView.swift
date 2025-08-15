@@ -19,6 +19,8 @@ struct DetailView: View {
                 // 内容区域 - 移除标签页，直接显示内容
                 if item.type == .image {
                     ImageContentView(item: item)
+                } else if item.type == .link {
+                    LinkContentView(item: item)
                 } else {
                     TextContentView(item: item)
                 }
@@ -200,6 +202,37 @@ struct TextContentView: View {
     }
 }
 
+struct LinkContentView: View {
+    let item: ClipboardItem
+    
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                // 链接预览卡片
+                LinkPreviewView(url: item.content)
+                
+                // 原始链接文本（可选择复制）
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("URL")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.gray)
+                    
+                    Text(item.content)
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundColor(.white)
+                        .textSelection(.enabled)
+                        .padding(12)
+                        .background(Color(red: 0.12, green: 0.12, blue: 0.12))
+                        .cornerRadius(8)
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.vertical, 16)
+        }
+        .background(SidebarView.backgroundColor)
+    }
+}
+
 struct HTMLContentView: View {
     let item: ClipboardItem
     
@@ -246,57 +279,70 @@ struct MetadataView: View {
                 .frame(height: 1)
             
             VStack(spacing: 12) {
-                // 类型和尺寸信息
+                // 应用来源
                 HStack {
-                    Text("Type")
+                    Text("Application")
                         .font(.system(size: 12))
                         .foregroundColor(.gray)
                     
                     Spacer()
                     
-                    Text(item.type == .image ? "Image" : "Text")
-                        .font(.system(size: 12))
-                        .foregroundColor(.white)
-                }
-                
-                if item.type == .image {
-                    HStack {
-                        Text("Image dimensions")
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray)
+                    HStack(spacing: 8) {
+                        // 应用图标
+                        if let bundleID = item.sourceAppBundleID,
+                           let appIcon = AppIconHelper.shared.getAppIcon(for: bundleID) {
+                            Image(nsImage: appIcon)
+                                .resizable()
+                                .frame(width: 16, height: 16)
+                        } else if let appIcon = AppIconHelper.shared.getAppIcon(for: item.sourceApp) {
+                            Image(nsImage: appIcon)
+                                .resizable()
+                                .frame(width: 16, height: 16)
+                        } else {
+                            Image(systemName: "app.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white)
+                        }
                         
-                        Spacer()
-                        
-                        Text(item.imageDimensions ?? "Unknown")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white)
-                    }
-                    
-                    HStack {
-                        Text("Image size")
-                            .font(.system(size: 12))
-                            .foregroundColor(.gray)
-                        
-                        Spacer()
-                        
-                        Text(formatImageSize(item.imageSize))
+                        Text(item.sourceApp)
                             .font(.system(size: 12))
                             .foregroundColor(.white)
                     }
                 }
                 
-                // 复制时间
+                // 类型
                 HStack {
-                    Text("Copy time")
+                    Text("Types")
                         .font(.system(size: 12))
                         .foregroundColor(.gray)
                     
                     Spacer()
                     
-                    Text("\(item.timestamp, formatter: dateFormatter)")
+                    Text(getTypeDisplayText())
                         .font(.system(size: 12))
                         .foregroundColor(.white)
                 }
+                
+                // 复制次数（仅当大于1时显示）
+                if item.copyCount > 1 {
+                    HStack {
+                        Text("Number of copies")
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                        
+                        Spacer()
+                        
+                        Text("\(item.copyCount)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white)
+                    }
+                }
+                
+                // 根据不同类型显示特定属性
+                getTypeSpecificViews()
+                
+                // 时间信息
+                getTimeViews()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -315,6 +361,314 @@ struct MetadataView: View {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
         return formatter.string(fromByteCount: size)
+    }
+    
+    private func getTypeDisplayText() -> String {
+        switch item.type {
+        case .text: return "Text"
+        case .image: return "Image" 
+        case .link: return "Link"
+        case .file: return "File"
+        case .code: return "Code"
+        }
+    }
+    
+    @ViewBuilder
+    private func getTypeSpecificViews() -> some View {
+        switch item.type {
+        case .image:
+            imageSpecificViews()
+        case .text:
+            textSpecificViews()
+        case .link:
+            linkSpecificViews()
+        case .file:
+            fileSpecificViews()
+        case .code:
+            codeSpecificViews()
+        }
+    }
+    
+    @ViewBuilder
+    private func imageSpecificViews() -> some View {
+        // 文件路径（仅当来自文件时显示）
+        if let filePath = item.filePath {
+            HStack {
+                Text("Path")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text(filePath)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        
+        // 文件大小
+        HStack {
+            Text("File size")
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            
+            Spacer()
+            
+            Text(formatImageSize(item.imageSize))
+                .font(.system(size: 12))
+                .foregroundColor(.white)
+        }
+        
+        // 图片尺寸
+        HStack {
+            Text("Image dimensions")
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            
+            Spacer()
+            
+            Text(item.imageDimensions ?? "Unknown")
+                .font(.system(size: 12))
+                .foregroundColor(.white)
+        }
+    }
+    
+    @ViewBuilder
+    private func textSpecificViews() -> some View {
+        // 字符数
+        if let characterCount = item.characterCount {
+            HStack {
+                Text("Characters")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text("\(characterCount)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+        
+        // 行数
+        if let lineCount = item.lineCount {
+            HStack {
+                Text("Lines")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text("\(lineCount)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+        
+        // 内容大小
+        if let contentSize = item.contentSize {
+            HStack {
+                Text("Content size")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text(formatImageSize(contentSize))
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func linkSpecificViews() -> some View {
+        // URL
+        HStack {
+            Text("URL")
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            
+            Spacer()
+            
+            Text(item.content)
+                .font(.system(size: 12))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        
+        // 域名
+        if let domain = item.domain {
+            HStack {
+                Text("Domain")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text(domain)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+        
+        // 协议
+        if let urlProtocol = item.urlProtocol {
+            HStack {
+                Text("Protocol")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text(urlProtocol.uppercased())
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func fileSpecificViews() -> some View {
+        // 文件路径
+        HStack {
+            Text("Path")
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            
+            Spacer()
+            
+            Text(item.content)
+                .font(.system(size: 12))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        
+        // 文件扩展名
+        if let fileExtension = item.fileExtension {
+            HStack {
+                Text("File extension")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text(fileExtension.uppercased())
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+        
+        // 文件大小
+        if let imageSize = item.imageSize {
+            HStack {
+                Text("File size")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text(formatImageSize(imageSize))
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func codeSpecificViews() -> some View {
+        // 编程语言
+        if let detectedLanguage = item.detectedLanguage {
+            HStack {
+                Text("Language")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text(detectedLanguage)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+        
+        // 行数
+        if let lineCount = item.lineCount {
+            HStack {
+                Text("Lines")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text("\(lineCount)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+        
+        // 字符数
+        if let characterCount = item.characterCount {
+            HStack {
+                Text("Characters")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text("\(characterCount)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func getTimeViews() -> some View {
+        if item.copyCount > 1 {
+            // 首次复制时间
+            HStack {
+                Text("First copy time")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text("\(item.firstCopyTime, formatter: dateFormatter)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+            
+            // 最后复制时间
+            HStack {
+                Text("Last copy time")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text("\(item.lastCopyTime, formatter: dateFormatter)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        } else {
+            // 复制时间
+            HStack {
+                Text("Copy time")
+                    .font(.system(size: 12))
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                Text("\(item.timestamp, formatter: dateFormatter)")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            }
+        }
     }
 }
 

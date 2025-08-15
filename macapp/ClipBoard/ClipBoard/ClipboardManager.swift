@@ -94,6 +94,7 @@ class ClipboardManager: ObservableObject {
         }
         
         let sourceApp = getCurrentSourceApp()
+        let sourceAppBundleID = getCurrentSourceAppBundleID()
         
         // 检查是否从排除的应用复制
         if excludedApps.contains(sourceApp) {
@@ -108,15 +109,26 @@ class ClipboardManager: ObservableObject {
             htmlContent: getHTMLContent(from: pasteboard),
             imageData: imageData,
             imageDimensions: dimensions,
-            imageSize: displaySize
+            imageSize: displaySize,
+            sourceAppBundleID: sourceAppBundleID
         )
         
         DispatchQueue.main.async {
             // 检查重复项（基于图片数据哈希）
             let imageHash = imageData.sha256
-            if !self.clipboardItems.contains(where: { 
+            if let existingIndex = self.clipboardItems.firstIndex(where: { 
                 $0.type == .image && $0.imageData?.sha256 == imageHash 
             }) {
+                // 找到重复项，增加复制次数并移到顶部
+                var existingItem = self.clipboardItems[existingIndex]
+                existingItem.incrementCopyCount()
+                self.clipboardItems.remove(at: existingIndex)
+                self.clipboardItems.insert(existingItem, at: 0)
+                
+                // 保存到本地
+                self.saveDataAsync()
+            } else {
+                // 新项目，添加到列表
                 self.clipboardItems.insert(newItem, at: 0)
                 
                 // 限制数量
@@ -133,6 +145,7 @@ class ClipboardManager: ObservableObject {
     private func addClipboardItem(content: String, type: ClipboardItemType = .text, pasteboard: NSPasteboard) {
         let actualType = type == .text ? determineType(from: content) : type
         let sourceApp = getCurrentSourceApp()
+        let sourceAppBundleID = getCurrentSourceAppBundleID()
         let htmlContent = getHTMLContent(from: pasteboard)
         
         // 检查是否从排除的应用复制
@@ -145,12 +158,23 @@ class ClipboardManager: ObservableObject {
             content: content,
             type: actualType,
             sourceApp: sourceApp,
-            htmlContent: htmlContent
+            htmlContent: htmlContent,
+            sourceAppBundleID: sourceAppBundleID
         )
         
         DispatchQueue.main.async {
             // 检查重复项
-            if !self.clipboardItems.contains(where: { $0.content == content }) {
+            if let existingIndex = self.clipboardItems.firstIndex(where: { $0.content == content }) {
+                // 找到重复项，增加复制次数并移到顶部
+                var existingItem = self.clipboardItems[existingIndex]
+                existingItem.incrementCopyCount()
+                self.clipboardItems.remove(at: existingIndex)
+                self.clipboardItems.insert(existingItem, at: 0)
+                
+                // 保存到本地
+                self.saveDataAsync()
+            } else {
+                // 新项目，添加到列表
                 self.clipboardItems.insert(newItem, at: 0)
                 
                 // 限制数量
@@ -328,6 +352,14 @@ class ClipboardManager: ObservableObject {
             return frontmostApp.localizedName ?? "Unknown"
         }
         return "Unknown"
+    }
+    
+    private func getCurrentSourceAppBundleID() -> String? {
+        // 获取当前活跃应用的 Bundle ID
+        if let frontmostApp = NSWorkspace.shared.frontmostApplication {
+            return frontmostApp.bundleIdentifier
+        }
+        return nil
     }
     
     private func getHTMLContent(from pasteboard: NSPasteboard) -> String? {
