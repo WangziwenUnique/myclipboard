@@ -172,6 +172,7 @@ struct ClipboardListView: View {
     @ObservedObject var clipboardManager: ClipboardManager
     @Binding var selectedItem: ClipboardItem?
     let category: ClipboardCategory
+    let selectedApp: String?  // 新增：选中的应用筛选
     @Binding var isSidebarVisible: Bool
     @Binding var isWindowPinned: Bool
     @State private var searchText = ""
@@ -185,10 +186,19 @@ struct ClipboardListView: View {
             isReversed: sortConfig.isReversed
         )
         
-        if searchText.isEmpty {
-            return items
+        // 首先按应用筛选（如果设置了应用筛选）
+        let appFilteredItems: [ClipboardItem]
+        if let selectedApp = selectedApp {
+            appFilteredItems = items.filter { $0.sourceApp == selectedApp }
         } else {
-            return items.filter { item in
+            appFilteredItems = items
+        }
+        
+        // 然后按搜索文本筛选
+        if searchText.isEmpty {
+            return appFilteredItems
+        } else {
+            return appFilteredItems.filter { item in
                 item.content.localizedCaseInsensitiveContains(searchText) ||
                 item.sourceApp.localizedCaseInsensitiveContains(searchText)
             }
@@ -488,6 +498,7 @@ struct EmptyStateView: View {
         clipboardManager: ClipboardManager(),
         selectedItem: .constant(nil),
         category: .history,
+        selectedApp: nil,  // 添加新的必需参数
         isSidebarVisible: .constant(true),
         isWindowPinned: .constant(false)
     )

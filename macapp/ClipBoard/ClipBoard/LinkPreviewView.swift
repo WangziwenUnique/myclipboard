@@ -118,7 +118,7 @@ struct LinkPreviewView: View {
                 }
             }
             .frame(height: 160)
-            .frame(maxWidth: .infinity)
+            .frame(width: 280)
             .clipped()
             
             // 下部20% - 文本区域
@@ -128,8 +128,9 @@ struct LinkPreviewView: View {
                     Text(title)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.white)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(width: 256, alignment: .leading)
                 }
                 
                 // 描述
@@ -137,14 +138,15 @@ struct LinkPreviewView: View {
                     Text(description)
                         .font(.system(size: 11))
                         .foregroundColor(.gray)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(width: 256, alignment: .leading)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .frame(height: 40)
-            .frame(maxWidth: .infinity)
+            .frame(height: 50)
+            .frame(width: 280)
             .background(Color(red: 0.15, green: 0.15, blue: 0.15))
         }
         .background(Color(red: 0.15, green: 0.15, blue: 0.15))

@@ -32,6 +32,7 @@ struct DetailView: View {
                 EmptyDetailView()
             }
         }
+        .frame(maxWidth: 400)
         .background(SidebarView.backgroundColor)
         .popover(isPresented: $showSettingsPopover, arrowEdge: .top) {
             SettingsPopoverView(showSettingsPopover: $showSettingsPopover)
@@ -210,7 +211,6 @@ struct LinkContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // 链接预览卡片
                 LinkPreviewView(url: item.content)
-                    .padding(.horizontal, 16)
             }
             .padding(.vertical, 16)
         }
@@ -390,6 +390,7 @@ struct MetadataView: View {
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .frame(maxWidth: 200, alignment: .trailing)
             }
         }
         
@@ -483,6 +484,7 @@ struct MetadataView: View {
                 .foregroundColor(.white)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .frame(maxWidth: 200, alignment: .trailing)
         }
         
         // 域名
@@ -531,6 +533,7 @@ struct MetadataView: View {
                 .foregroundColor(.white)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .frame(maxWidth: 200, alignment: .trailing)
         }
         
         // 文件扩展名
@@ -579,6 +582,7 @@ struct MetadataView: View {
                 .foregroundColor(.white)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .frame(maxWidth: 200, alignment: .trailing)
         }
         
         // 邮箱域名

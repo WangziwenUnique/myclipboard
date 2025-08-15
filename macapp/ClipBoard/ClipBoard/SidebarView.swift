@@ -83,6 +83,7 @@ struct SidebarView: View {
     static let buttonBackgroundColor = Color(red: 0.18, green: 0.18, blue: 0.18)
     @ObservedObject var clipboardManager: ClipboardManager
     @Binding var selectedCategory: ClipboardCategory
+    @Binding var selectedApp: String?  // 新增：选中的应用筛选
     var onTooltip: ((ContentView.GlobalTooltipData?) -> Void)? = nil
     var sidebarWidth: CGFloat = 50 // 默认宽度
     
@@ -151,14 +152,27 @@ struct SidebarView: View {
             }
             .padding(.vertical, 8)
 
-            Spacer(minLength: 12)
+            // 第二和第三部分之间的间距（固定12px）
+            Spacer()
+                .frame(height: 12)
 
             // 第三部分：应用来源图标（可折叠）
             VStack(spacing: 4) {
                 // 显示应用图标
                 ForEach(displayedAppIcons, id: \.self) { app in
-                    AppIconRow(appName: app, onTooltip: onTooltip, sidebarWidth: sidebarWidth) {
-                        selectedCategory = .history
+                    AppIconRow(
+                        appName: app, 
+                        isSelected: selectedApp == app,  // 传递选中状态
+                        onTooltip: onTooltip, 
+                        sidebarWidth: sidebarWidth
+                    ) {
+                        // 应用筛选逻辑：点击相同应用取消筛选，点击不同应用设置筛选
+                        if selectedApp == app {
+                            selectedApp = nil  // 取消筛选
+                        } else {
+                            selectedApp = app  // 设置应用筛选
+                            selectedCategory = .history  // 切换到历史类别显示所有该应用的记录
+                        }
                     }
                 }
                 
@@ -181,6 +195,9 @@ struct SidebarView: View {
                 }
             }
             .padding(.bottom, 12)
+            
+            // 占据剩余空间，让第三部分靠近第二部分
+            Spacer()
 
             // 底部控制栏（保留）
             // CompactBottomControlBar()
@@ -251,6 +268,7 @@ struct CategoryIconRow: View {
 
 struct AppIconRow: View {
     let appName: String
+    let isSelected: Bool  // 新增：选中状态
     var onTooltip: ((ContentView.GlobalTooltipData?) -> Void)? = nil
     var sidebarWidth: CGFloat = 50
     let action: () -> Void
@@ -274,14 +292,30 @@ struct AppIconRow: View {
         GeometryReader { geometry in
             ZStack {
                 Button(action: action) {
-                    Image(systemName: imageName)
-                        .foregroundColor(isHovered ? .white : .gray)
-                        .frame(width: 18, height: 18)
-                        .frame(width: 26, height: 26)
-                        .background(
-                            isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : SidebarView.buttonBackgroundColor
-                        )
-                        .cornerRadius(5)
+                    // 尝试获取真实应用图标，失败则使用系统图标
+                    if let appIcon = AppIconHelper.shared.getAppIcon(for: appName) {
+                        Image(nsImage: appIcon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 18, height: 18)
+                            .frame(width: 26, height: 26)
+                            .background(
+                                isSelected ? SidebarView.selectedBackgroundColor :
+                                (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : SidebarView.buttonBackgroundColor)
+                            )
+                            .cornerRadius(5)
+                    } else {
+                        // 备用系统图标
+                        Image(systemName: imageName)
+                            .foregroundColor(isSelected ? .blue : (isHovered ? .white : .gray))
+                            .frame(width: 18, height: 18)
+                            .frame(width: 26, height: 26)
+                            .background(
+                                isSelected ? SidebarView.selectedBackgroundColor :
+                                (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : SidebarView.buttonBackgroundColor)
+                            )
+                            .cornerRadius(5)
+                    }
                 }
                 .buttonStyle(PlainButtonStyle())
                 .onHover { hovering in
@@ -465,6 +499,7 @@ struct BottomControlBar: View {
     SidebarView(
         clipboardManager: ClipboardManager(),
         selectedCategory: .constant(.history),
+        selectedApp: .constant(nil),  // 添加新的必需参数
         onTooltip: { _ in },
         sidebarWidth: 50
     )
