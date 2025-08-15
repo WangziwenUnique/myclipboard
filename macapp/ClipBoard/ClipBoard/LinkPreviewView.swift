@@ -5,11 +5,15 @@ struct LinkPreviewView: View {
     let url: String
     @State private var previewData: LinkPreviewData?
     @State private var isLoading = false
+    @State private var hasError = false
+    @StateObject private var metadataService = LinkMetadataService.shared
     
     var body: some View {
         VStack(spacing: 0) {
             if isLoading {
                 loadingView
+            } else if hasError {
+                errorView
             } else if let preview = previewData {
                 previewCard(preview: preview)
             } else {
@@ -34,6 +38,38 @@ struct LinkPreviewView: View {
                     Text("Loading preview...")
                         .font(.system(size: 12))
                         .foregroundColor(.gray)
+                }
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 16)
+    }
+    
+    private var errorView: some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color(red: 0.15, green: 0.15, blue: 0.15))
+            .frame(height: 120)
+            .overlay(
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 32))
+                        .foregroundColor(.orange)
+                    
+                    Text("Preview Unavailable")
+                        .font(.system(size: 14))
+                        .foregroundColor(.gray)
+                    
+                    if let domain = URL(string: url)?.host {
+                        Text(domain)
+                            .font(.system(size: 12))
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Button("Retry") {
+                        loadPreview()
+                    }
+                    .font(.system(size: 12))
+                    .foregroundColor(.blue)
+                    .padding(.top, 4)
                 }
             )
             .padding(.horizontal, 16)
@@ -138,42 +174,27 @@ struct LinkPreviewView: View {
     }
     
     private func loadPreview() {
-        guard !isLoading, previewData == nil else { return }
+        guard !isLoading else { return }
         
         isLoading = true
+        hasError = false
         
-        // 模拟异步加载（实际实现中可能需要网络请求）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            // 简单的预览数据生成
-            if let url = URL(string: url) {
-                let domain = url.host ?? "Unknown"
-                let title = generateTitle(from: url)
-                let description = "Visit \(domain) for more information"
-                
-                previewData = LinkPreviewData(
-                    title: title,
-                    description: description,
-                    domain: domain,
-                    iconURL: nil
-                )
-            }
+        Task {
+            let metadata = await metadataService.fetchMetadata(for: url)
             
-            isLoading = false
+            await MainActor.run {
+                isLoading = false
+                
+                if let metadata = metadata {
+                    previewData = metadata
+                    hasError = false
+                } else {
+                    hasError = true
+                }
+            }
         }
     }
     
-    private func generateTitle(from url: URL) -> String {
-        let host = url.host ?? "Website"
-        let pathComponents = url.pathComponents.filter { $0 != "/" }
-        
-        if let lastComponent = pathComponents.last {
-            return lastComponent.replacingOccurrences(of: "-", with: " ")
-                .replacingOccurrences(of: "_", with: " ")
-                .capitalized
-        } else {
-            return host.capitalized
-        }
-    }
 }
 
 struct LinkPreviewData {
