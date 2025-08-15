@@ -102,64 +102,55 @@ struct LinkPreviewView: View {
     }
     
     private func previewCard(preview: LinkPreviewData) -> some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(Color(red: 0.15, green: 0.15, blue: 0.15))
-            .frame(height: 120)
-            .overlay(
-                HStack(spacing: 12) {
-                    // 左侧图标/图片
-                    VStack {
-                        if let iconURL = preview.iconURL, !iconURL.isEmpty {
-                            AsyncImage(url: URL(string: iconURL)) { image in
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                            } placeholder: {
-                                defaultIcon
-                            }
-                            .frame(width: 32, height: 32)
-                            .cornerRadius(6)
-                        } else {
-                            defaultIcon
-                        }
-                        
-                        Spacer()
+        VStack(spacing: 0) {
+            // 上部80% - 图片区域
+            Group {
+                if let iconURL = preview.iconURL, !iconURL.isEmpty {
+                    AsyncImage(url: URL(string: iconURL)) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        largeDefaultIcon
                     }
-                    
-                    // 右侧内容
-                    VStack(alignment: .leading, spacing: 4) {
-                        // 标题
-                        if let title = preview.title, !title.isEmpty {
-                            Text(title)
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white)
-                                .lineLimit(2)
-                        }
-                        
-                        // 描述
-                        if let description = preview.description, !description.isEmpty {
-                            Text(description)
-                                .font(.system(size: 12))
-                                .foregroundColor(.gray)
-                                .lineLimit(2)
-                        }
-                        
-                        Spacer()
-                        
-                        // 域名
-                        if let domain = preview.domain {
-                            Text(domain)
-                                .font(.system(size: 10))
-                                .foregroundColor(.gray)
-                        }
-                    }
-                    
-                    Spacer()
+                } else {
+                    largeDefaultIcon
                 }
-                .padding(12)
-            )
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
+            }
+            .frame(height: 160)
+            .frame(maxWidth: .infinity)
+            .clipped()
+            
+            // 下部20% - 文本区域
+            VStack(alignment: .leading, spacing: 4) {
+                // 标题
+                if let title = preview.title, !title.isEmpty {
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                
+                // 描述
+                if let description = preview.description, !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 11))
+                        .foregroundColor(.gray)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(height: 40)
+            .frame(maxWidth: .infinity)
+            .background(Color(red: 0.15, green: 0.15, blue: 0.15))
+        }
+        .background(Color(red: 0.15, green: 0.15, blue: 0.15))
+        .cornerRadius(12)
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
     }
     
     private var defaultIcon: some View {
@@ -169,6 +160,16 @@ struct LinkPreviewView: View {
             .overlay(
                 Image(systemName: "link")
                     .font(.system(size: 16))
+                    .foregroundColor(.gray)
+            )
+    }
+    
+    private var largeDefaultIcon: some View {
+        RoundedRectangle(cornerRadius: 0)
+            .fill(Color(red: 0.2, green: 0.2, blue: 0.2))
+            .overlay(
+                Image(systemName: "link")
+                    .font(.system(size: 48))
                     .foregroundColor(.gray)
             )
     }

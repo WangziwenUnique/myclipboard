@@ -210,22 +210,7 @@ struct LinkContentView: View {
             VStack(alignment: .leading, spacing: 16) {
                 // 链接预览卡片
                 LinkPreviewView(url: item.content)
-                
-                // 原始链接文本（可选择复制）
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("URL")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.gray)
-                    
-                    Text(item.content)
-                        .font(.system(.body, design: .monospaced))
-                        .foregroundColor(.white)
-                        .textSelection(.enabled)
-                        .padding(12)
-                        .background(Color(red: 0.12, green: 0.12, blue: 0.12))
-                        .cornerRadius(8)
-                }
-                .padding(.horizontal, 16)
+                    .padding(.horizontal, 16)
             }
             .padding(.vertical, 16)
         }
@@ -369,7 +354,7 @@ struct MetadataView: View {
         case .image: return "Image" 
         case .link: return "Link"
         case .file: return "File"
-        case .code: return "Code"
+        case .email: return "Email"
         }
     }
     
@@ -384,8 +369,8 @@ struct MetadataView: View {
             linkSpecificViews()
         case .file:
             fileSpecificViews()
-        case .code:
-            codeSpecificViews()
+        case .email:
+            emailSpecificViews()
         }
     }
     
@@ -580,32 +565,32 @@ struct MetadataView: View {
     }
     
     @ViewBuilder
-    private func codeSpecificViews() -> some View {
-        // 编程语言
-        if let detectedLanguage = item.detectedLanguage {
-            HStack {
-                Text("Language")
-                    .font(.system(size: 12))
-                    .foregroundColor(.gray)
-                
-                Spacer()
-                
-                Text(detectedLanguage)
-                    .font(.system(size: 12))
-                    .foregroundColor(.white)
-            }
+    private func emailSpecificViews() -> some View {
+        // 邮箱地址
+        HStack {
+            Text("Email")
+                .font(.system(size: 12))
+                .foregroundColor(.gray)
+            
+            Spacer()
+            
+            Text(item.content)
+                .font(.system(size: 12))
+                .foregroundColor(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
         }
         
-        // 行数
-        if let lineCount = item.lineCount {
+        // 邮箱域名
+        if let domain = item.emailDomain {
             HStack {
-                Text("Lines")
+                Text("Domain")
                     .font(.system(size: 12))
                     .foregroundColor(.gray)
                 
                 Spacer()
                 
-                Text("\(lineCount)")
+                Text(domain)
                     .font(.system(size: 12))
                     .foregroundColor(.white)
             }

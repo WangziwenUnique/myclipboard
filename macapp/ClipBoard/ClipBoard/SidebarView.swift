@@ -54,13 +54,12 @@ extension ClipboardCategory {
     var shortcut: String? {
         switch self {
         case .history: return "⌘1"
-        case .favorites: return "⌘2" 
-        case .files: return "⌘3"
+        case .favorites: return "⌘2"
+        case .text: return "⌘3"
         case .images: return "⌘4"
         case .links: return "⌘5"
-        case .code: return "⌘6"
+        case .files: return "⌘6"
         case .mail: return "⌘7"
-        case .chrome: return nil
         }
     }
     
@@ -68,12 +67,11 @@ extension ClipboardCategory {
         switch self {
         case .history: return "History"
         case .favorites: return "Favorites"
-        case .files: return "Files" 
+        case .text: return "Text"
         case .images: return "Images"
         case .links: return "Links"
-        case .code: return "Code"
+        case .files: return "Files"
         case .mail: return "Mail"
-        case .chrome: return "Chrome"
         }
     }
 }
@@ -88,16 +86,39 @@ struct SidebarView: View {
     var onTooltip: ((ContentView.GlobalTooltipData?) -> Void)? = nil
     var sidebarWidth: CGFloat = 50 // 默认宽度
     
-    // 常用分类清单（不包含 history）
-    private let commonCategories: [ClipboardCategory] = [.favorites, .files, .images, .links, .code, .mail]
+    // 应用图标展开状态
+    @State private var isAppSectionExpanded: Bool = false
     
-    // 根据已有剪贴板数据生成来源应用列表（去重、限定长度）
+    // 常用分类清单（不包含 history）
+    private let commonCategories: [ClipboardCategory] = [.favorites, .text, .images, .links, .files, .mail]
+    
+    // 根据已有剪贴板数据生成来源应用列表（去重、按最新排序）
     private var appSourceIcons: [String] {
-        let names = clipboardManager.clipboardItems.map { $0.sourceApp }
-        let orderedUnique = names.reduce(into: [String]()) { acc, name in
-            if !acc.contains(name) { acc.append(name) }
+        let itemsWithApp = clipboardManager.clipboardItems
+            .filter { !$0.sourceApp.isEmpty && $0.sourceApp != "Unknown" }
+            .sorted { $0.timestamp > $1.timestamp } // 按时间排序，最新在前
+        
+        var seenApps = Set<String>()
+        var orderedApps: [String] = []
+        
+        for item in itemsWithApp {
+            if !seenApps.contains(item.sourceApp) {
+                seenApps.insert(item.sourceApp)
+                orderedApps.append(item.sourceApp)
+            }
         }
-        return Array(orderedUnique.prefix(8))
+        
+        return Array(orderedApps.prefix(8)) // 限制最多显示8个应用
+    }
+    
+    // 显示的应用图标列表（根据展开状态决定）
+    private var displayedAppIcons: [String] {
+        if isAppSectionExpanded {
+            return appSourceIcons
+        } else {
+            // 只显示最新的一个应用
+            return Array(appSourceIcons.prefix(1))
+        }
     }
     
     var body: some View {
@@ -132,12 +153,31 @@ struct SidebarView: View {
 
             Spacer(minLength: 12)
 
-            // 第三部分：应用来源图标（来自现有数据的 sourceApp）
+            // 第三部分：应用来源图标（可折叠）
             VStack(spacing: 4) {
-                ForEach(appSourceIcons, id: \.self) { app in
+                // 显示应用图标
+                ForEach(displayedAppIcons, id: \.self) { app in
                     AppIconRow(appName: app, onTooltip: onTooltip, sidebarWidth: sidebarWidth) {
                         selectedCategory = .history
                     }
+                }
+                
+                // 展开/折叠按钮（仅在有多个应用时显示）
+                if appSourceIcons.count > 1 {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isAppSectionExpanded.toggle()
+                        }
+                    }) {
+                        Image(systemName: isAppSectionExpanded ? "chevron.up" : "chevron.down")
+                            .foregroundColor(.gray)
+                            .frame(width: 14, height: 14)
+                            .frame(width: 26, height: 20)
+                            .background(SidebarView.buttonBackgroundColor)
+                            .cornerRadius(4)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .help(isAppSectionExpanded ? "折叠应用列表" : "展开应用列表 (\(appSourceIcons.count))")
                 }
             }
             .padding(.bottom, 12)

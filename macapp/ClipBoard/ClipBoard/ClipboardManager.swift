@@ -191,11 +191,19 @@ class ClipboardManager: ObservableObject {
     private func determineType(from content: String) -> ClipboardItemType {
         if content.hasPrefix("http://") || content.hasPrefix("https://") {
             return .link
-        } else if content.contains("```") || content.contains("import ") || content.contains("function ") {
-            return .code
+        } else if isValidEmail(content.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return .email
         } else {
             return .text
         }
+    }
+    
+    // 精确的邮箱检测方法
+    private func isValidEmail(_ content: String) -> Bool {
+        let emailPattern = #"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$"#
+        let regex = try? NSRegularExpression(pattern: emailPattern, options: [.caseInsensitive])
+        let range = NSRange(location: 0, length: content.utf16.count)
+        return regex?.firstMatch(in: content, options: [], range: range) != nil
     }
     
     // 获取图片的估算文件大小（用于显示）
@@ -418,18 +426,16 @@ class ClipboardManager: ObservableObject {
             return clipboardItems
         case .favorites:
             return clipboardItems.filter { $0.isFavorite }
+        case .text:
+            return clipboardItems.filter { $0.type == .text }
         case .files:
             return clipboardItems.filter { $0.type == .file }
         case .images:
             return clipboardItems.filter { $0.type == .image }
         case .links:
             return clipboardItems.filter { $0.type == .link }
-        case .code:
-            return clipboardItems.filter { $0.type == .text && $0.content.contains("```") }
         case .mail:
-            return clipboardItems.filter { $0.content.contains("@") && $0.content.contains(".") }
-        case .chrome:
-            return clipboardItems.filter { $0.sourceApp == "Google Chrome" }
+            return clipboardItems.filter { $0.type == .email }
         }
     }
     

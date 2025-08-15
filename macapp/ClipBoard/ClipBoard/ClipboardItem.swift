@@ -60,16 +60,18 @@ struct ClipboardItem: Identifiable, Hashable, Codable {
         return (content as NSString).pathExtension
     }
     
-    // 代码相关属性
-    var detectedLanguage: String? {
-        guard type == .code else { return nil }
-        // 简单的语言检测逻辑
-        if content.contains("func ") || content.contains("var ") || content.contains("let ") {
-            return "Swift"
-        } else if content.contains("function ") || content.contains("const ") || content.contains("let ") {
-            return "JavaScript"
-        } else if content.contains("def ") || content.contains("import ") {
-            return "Python"
+    // 邮箱相关属性
+    var emailDomain: String? {
+        guard type == .email else { return nil }
+        let emailPattern = #"[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})"#
+        let regex = try? NSRegularExpression(pattern: emailPattern, options: [.caseInsensitive])
+        let range = NSRange(location: 0, length: content.utf16.count)
+        
+        if let match = regex?.firstMatch(in: content, options: [], range: range) {
+            let domainRange = match.range(at: 1)
+            if let swiftRange = Range(domainRange, in: content) {
+                return String(content[swiftRange])
+            }
         }
         return nil
     }
@@ -114,7 +116,7 @@ struct ClipboardItem: Identifiable, Hashable, Codable {
             processedContent = content
         case .file:
             processedContent = "File: \(content)"
-        case .code:
+        case .email:
             processedContent = content
         }
         
@@ -139,8 +141,8 @@ struct ClipboardItem: Identifiable, Hashable, Codable {
             return "link"
         case .file:
             return "doc"
-        case .code:
-            return "chevron.left.forwardslash.chevron.right"
+        case .email:
+            return "envelope"
         }
     }
     
@@ -154,29 +156,27 @@ enum ClipboardItemType: String, CaseIterable, Codable {
     case image = "Image"
     case link = "Link"
     case file = "File"
-    case code = "Code"
+    case email = "Email"
 }
 
 enum ClipboardCategory: String, CaseIterable {
     case history = "History"
     case favorites = "Favorites"
-    case files = "Files"
+    case text = "Text"
     case images = "Images"
     case links = "Links"
-    case code = "Code"
+    case files = "Files"
     case mail = "Mail"
-    case chrome = "Chrome"
     
     var icon: String {
         switch self {
         case .history: return "clock"
         case .favorites: return "star"
-        case .files: return "folder"
+        case .text: return "doc.text"
         case .images: return "photo"
         case .links: return "link"
-        case .code: return "chevron.left.forwardslash.chevron.right"
+        case .files: return "folder"
         case .mail: return "envelope"
-        case .chrome: return "globe"
         }
     }
 }
