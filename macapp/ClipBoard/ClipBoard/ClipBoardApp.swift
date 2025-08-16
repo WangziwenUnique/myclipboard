@@ -36,6 +36,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: NSWindow?
     private var eventMonitor: Any?
     
+    // 用于保存窗口大小的 UserDefaults keys
+    private let windowWidthKey = "ClipBoard.WindowWidth"
+    private let windowHeightKey = "ClipBoard.WindowHeight"
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 首先设置激活策略，确保应用不显示在 Dock 中
         NSApp.setActivationPolicy(.accessory)
@@ -100,9 +104,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             hostingController.view.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
         ])
         
+        // 恢复上次保存的窗口大小，或使用默认值
+        let savedWidth = UserDefaults.standard.object(forKey: windowWidthKey) as? CGFloat ?? 820
+        let savedHeight = UserDefaults.standard.object(forKey: windowHeightKey) as? CGFloat ?? 540
+        
         window = KeyboardAccessibleWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: 540),
-            styleMask: [.borderless],
+            contentRect: NSRect(x: 0, y: 0, width: savedWidth, height: savedHeight),
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -148,9 +156,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 确保窗口可以响应鼠标事件进行拖动
         window?.acceptsMouseMovedEvents = true
         
-        // 禁止窗口大小调整
-        window?.minSize = NSSize(width: 820, height: 540)
-        window?.maxSize = NSSize(width: 820, height: 540)
+        // 设置合理的窗口大小限制，允许用户调整
+        window?.minSize = NSSize(width: 720, height: 480)
+        window?.maxSize = NSSize(width: 1600, height: 1200)
         
         // 启用窗口的 layer 支持并设置圆角
         // 注意：这些属性应该设置在 contentView 上，而不是 window 上
@@ -268,5 +276,14 @@ extension AppDelegate: NSWindowDelegate {
     
     func windowWillClose(_ notification: Notification) {
         // 窗口关闭时的处理
+    }
+    
+    func windowDidResize(_ notification: Notification) {
+        // 窗口大小改变时保存新的尺寸
+        if let window = window {
+            let size = window.frame.size
+            UserDefaults.standard.set(size.width, forKey: windowWidthKey)
+            UserDefaults.standard.set(size.height, forKey: windowHeightKey)
+        }
     }
 }

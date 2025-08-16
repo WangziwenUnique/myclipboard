@@ -32,7 +32,6 @@ struct DetailView: View {
                 EmptyDetailView()
             }
         }
-        .frame(maxWidth: 400)
         .background(SidebarView.backgroundColor)
         .popover(isPresented: $showSettingsPopover, arrowEdge: .top) {
             SettingsPopoverView(showSettingsPopover: $showSettingsPopover)
@@ -146,7 +145,7 @@ struct ImageContentView: View {
     
     private func actualImageView(nsImage: NSImage, geometry: GeometryProxy) -> some View {
         let maxWidth = geometry.size.width - 32
-        let maxHeight = max(400, geometry.size.height - 100)
+        let maxHeight = max(geometry.size.height * 0.7, geometry.size.height - 120)
         
         return Image(nsImage: nsImage)
             .resizable()
@@ -158,7 +157,7 @@ struct ImageContentView: View {
     
     private func placeholderImageView(geometry: GeometryProxy) -> some View {
         let maxWidth = geometry.size.width - 32
-        let maxHeight = min(400, max(300, geometry.size.height - 100))
+        let maxHeight = max(geometry.size.height * 0.6, geometry.size.height - 150)
         
         return RoundedRectangle(cornerRadius: 8)
             .fill(Color(red: 0.12, green: 0.12, blue: 0.12))
@@ -390,7 +389,7 @@ struct MetadataView: View {
                     .foregroundColor(.white)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .frame(maxWidth: 200, alignment: .trailing)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         

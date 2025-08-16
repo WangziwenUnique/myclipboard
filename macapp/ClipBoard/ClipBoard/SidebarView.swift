@@ -89,6 +89,8 @@ struct SidebarView: View {
     
     // 应用图标展开状态
     @State private var isAppSectionExpanded: Bool = false
+    // 下拉按钮悬浮状态
+    @State private var isDropdownHovered: Bool = false
     
     // 常用分类清单（不包含 history）
     private let commonCategories: [ClipboardCategory] = [.favorites, .text, .images, .links, .files, .mail]
@@ -184,13 +186,20 @@ struct SidebarView: View {
                         }
                     }) {
                         Image(systemName: isAppSectionExpanded ? "chevron.up" : "chevron.down")
-                            .foregroundColor(.gray)
+                            .foregroundColor(isDropdownHovered ? .white : .gray)
                             .frame(width: 14, height: 14)
-                            .frame(width: 26, height: 20)
-                            .background(Color.clear)
-                            .cornerRadius(4)
+                            .frame(width: 30, height: 26)
+                            .background(
+                                isDropdownHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear
+                            )
+                            .cornerRadius(6)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isDropdownHovered = hovering
+                        }
+                    }
                     .help(isAppSectionExpanded ? "折叠应用列表" : "展开应用列表 (\(appSourceIcons.count))")
                 }
             }
