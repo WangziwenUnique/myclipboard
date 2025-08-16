@@ -40,6 +40,7 @@ enum KeyboardShortcutAction: CaseIterable {
     // 搜索功能
     case focusSearch
     case clearSearchOrClose
+    case toggleFocus
     
     // 操作功能
     case copyItem
@@ -77,6 +78,7 @@ enum KeyboardShortcutAction: CaseIterable {
         case .selectItem9: return "9"
         case .focusSearch: return "f"
         case .clearSearchOrClose: return "\u{001B}"  // ESC
+        case .toggleFocus: return "\t"  // Tab
         case .copyItem: return "c"
         case .deleteItem: return "d"
         case .toggleFavorite: return "b"
@@ -101,6 +103,8 @@ enum KeyboardShortcutAction: CaseIterable {
         case .focusSearch:
             return .command
         case .clearSearchOrClose:
+            return []
+        case .toggleFocus:
             return []
         case .copyItem, .deleteItem, .toggleFavorite:
             return .command
@@ -141,6 +145,7 @@ enum KeyboardShortcutAction: CaseIterable {
         case .selectItem9: return "选择第9项"
         case .focusSearch: return "聚焦搜索框"
         case .clearSearchOrClose: return "清除搜索或关闭窗口"
+        case .toggleFocus: return "切换搜索框和列表焦点"
         case .copyItem: return "复制选中项"
         case .deleteItem: return "删除选中项"
         case .toggleFavorite: return "切换收藏状态"

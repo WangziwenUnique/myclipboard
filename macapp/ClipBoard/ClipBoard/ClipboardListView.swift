@@ -267,10 +267,6 @@ struct ClipboardListView: View {
         }
         .background(SidebarView.backgroundColor)
         .onAppear {
-            // 窗口显示时自动聚焦搜索框
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isSearchFocused = true
-            }
             setupListKeyboardShortcuts()
         }
         .onChange(of: filteredItems) { items in
@@ -335,12 +331,19 @@ struct ClipboardListView: View {
         shortcutManager.registerHandler(for: .clearSearchOrClose) {
             if !searchText.isEmpty {
                 searchText = ""
+            } else if isSearchFocused {
+                // 如果搜索框为空且有焦点，则将焦点返回列表
+                isSearchFocused = false
             } else {
                 // 关闭窗口
                 if let window = NSApp.keyWindow {
                     window.orderOut(nil)
                 }
             }
+        }
+        
+        shortcutManager.registerHandler(for: .toggleFocus) {
+            isSearchFocused.toggle()
         }
         
         // 操作快捷键

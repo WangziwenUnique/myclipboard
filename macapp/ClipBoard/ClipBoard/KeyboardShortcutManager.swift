@@ -87,6 +87,8 @@ class KeyboardShortcutManager: ObservableObject {
             return true
         case .clearSearchOrClose:
             return true // 可以在任何状态下使用
+        case .toggleFocus:
+            return true // 可以在任何状态下使用
         default:
             return true
         }
