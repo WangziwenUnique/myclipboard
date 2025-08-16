@@ -175,9 +175,11 @@ struct ClipboardListView: View {
     let selectedApp: String?  // 新增：选中的应用筛选
     @Binding var isSidebarVisible: Bool
     @Binding var isWindowPinned: Bool
+    @ObservedObject var shortcutManager: KeyboardShortcutManager
     @State private var searchText = ""
     @State private var sortConfig = SortConfiguration()
     @State private var isSearchFocused = false
+    @State private var currentSelectedIndex: Int = 0
     
     var filteredItems: [ClipboardItem] {
         let items = clipboardManager.getSortedItems(
@@ -269,7 +271,159 @@ struct ClipboardListView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                 isSearchFocused = true
             }
+            setupListKeyboardShortcuts()
         }
+        .onChange(of: filteredItems) { items in
+            // 更新快捷键管理器的列表状态
+            shortcutManager.updateListState(
+                focusedOnList: !isSearchFocused,
+                currentIndex: currentSelectedIndex,
+                totalCount: items.count
+            )
+            
+            // 如果当前选择的索引超出范围，重置为0
+            if currentSelectedIndex >= items.count && !items.isEmpty {
+                currentSelectedIndex = 0
+                selectedItem = items[0]
+            }
+        }
+        .onChange(of: isSearchFocused) { focused in
+            shortcutManager.isSearchFocused = focused
+            shortcutManager.isListFocused = !focused
+        }
+    }
+    
+    // MARK: - 列表快捷键设置
+    private func setupListKeyboardShortcuts() {
+        // 列表导航快捷键
+        shortcutManager.registerHandler(for: .navigateUp) {
+            navigateUp()
+        }
+        
+        shortcutManager.registerHandler(for: .navigateDown) {
+            navigateDown()
+        }
+        
+        shortcutManager.registerHandler(for: .selectItem) {
+            selectCurrentItem()
+        }
+        
+        shortcutManager.registerHandler(for: .jumpToTop) {
+            jumpToTop()
+        }
+        
+        shortcutManager.registerHandler(for: .jumpToBottom) {
+            jumpToBottom()
+        }
+        
+        // 数字键快速选择
+        shortcutManager.registerHandler(for: .selectItem1) { selectItemByNumber(1) }
+        shortcutManager.registerHandler(for: .selectItem2) { selectItemByNumber(2) }
+        shortcutManager.registerHandler(for: .selectItem3) { selectItemByNumber(3) }
+        shortcutManager.registerHandler(for: .selectItem4) { selectItemByNumber(4) }
+        shortcutManager.registerHandler(for: .selectItem5) { selectItemByNumber(5) }
+        shortcutManager.registerHandler(for: .selectItem6) { selectItemByNumber(6) }
+        shortcutManager.registerHandler(for: .selectItem7) { selectItemByNumber(7) }
+        shortcutManager.registerHandler(for: .selectItem8) { selectItemByNumber(8) }
+        shortcutManager.registerHandler(for: .selectItem9) { selectItemByNumber(9) }
+        
+        // 搜索快捷键
+        shortcutManager.registerHandler(for: .focusSearch) {
+            isSearchFocused = true
+        }
+        
+        shortcutManager.registerHandler(for: .clearSearchOrClose) {
+            if !searchText.isEmpty {
+                searchText = ""
+            } else {
+                // 关闭窗口
+                if let window = NSApp.keyWindow {
+                    window.orderOut(nil)
+                }
+            }
+        }
+        
+        // 操作快捷键
+        shortcutManager.registerHandler(for: .copyItem) {
+            copyCurrentItem()
+        }
+        
+        shortcutManager.registerHandler(for: .deleteItem) {
+            deleteCurrentItem()
+        }
+        
+        shortcutManager.registerHandler(for: .toggleFavorite) {
+            toggleCurrentItemFavorite()
+        }
+    }
+    
+    // MARK: - 导航辅助方法
+    private func navigateUp() {
+        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        currentSelectedIndex = max(0, currentSelectedIndex - 1)
+        selectedItem = filteredItems[currentSelectedIndex]
+    }
+    
+    private func navigateDown() {
+        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        currentSelectedIndex = min(filteredItems.count - 1, currentSelectedIndex + 1)
+        selectedItem = filteredItems[currentSelectedIndex]
+    }
+    
+    private func selectCurrentItem() {
+        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        let item = filteredItems[currentSelectedIndex]
+        clipboardManager.copyToClipboard(item.content)
+        
+        // 关闭窗口
+        if let window = NSApp.keyWindow {
+            window.orderOut(nil)
+        }
+    }
+    
+    private func jumpToTop() {
+        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        currentSelectedIndex = 0
+        selectedItem = filteredItems[0]
+    }
+    
+    private func jumpToBottom() {
+        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        currentSelectedIndex = filteredItems.count - 1
+        selectedItem = filteredItems[currentSelectedIndex]
+    }
+    
+    private func selectItemByNumber(_ number: Int) {
+        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        if let index = shortcutManager.getListIndexForNumber(number) {
+            currentSelectedIndex = index
+            selectedItem = filteredItems[index]
+        }
+    }
+    
+    private func copyCurrentItem() {
+        guard let item = selectedItem else { return }
+        clipboardManager.copyToClipboard(item.content)
+    }
+    
+    private func deleteCurrentItem() {
+        guard let item = selectedItem else { return }
+        clipboardManager.deleteItem(item)
+        
+        // 选择下一个或上一个项目
+        if !filteredItems.isEmpty {
+            if currentSelectedIndex >= filteredItems.count {
+                currentSelectedIndex = max(0, filteredItems.count - 1)
+            }
+            if currentSelectedIndex < filteredItems.count {
+                selectedItem = filteredItems[currentSelectedIndex]
+            }
+        }
+    }
+    
+    private func toggleCurrentItemFavorite() {
+        guard let item = selectedItem else { return }
+        clipboardManager.toggleFavorite(for: item)
     }
 }
 
@@ -507,7 +661,8 @@ struct EmptyStateView: View {
         category: .history,
         selectedApp: nil,  // 添加新的必需参数
         isSidebarVisible: .constant(true),
-        isWindowPinned: .constant(false)
+        isWindowPinned: .constant(false),
+        shortcutManager: KeyboardShortcutManager.shared
     )
 }
 

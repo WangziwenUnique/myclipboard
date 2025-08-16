@@ -10,6 +10,7 @@ import CoreData
 
 struct ContentView: View {
     @StateObject private var clipboardManager = ClipboardManager()
+    @ObservedObject private var shortcutManager = KeyboardShortcutManager.shared
     @State private var selectedCategory: ClipboardCategory = .history
     @State private var selectedApp: String? = nil  // 新增：选中的应用筛选
     @State private var globalTooltip: GlobalTooltipData? = nil
@@ -70,7 +71,8 @@ struct ContentView: View {
                         category: selectedCategory,
                         selectedApp: selectedApp,  // 传递应用筛选状态
                         isSidebarVisible: $isSidebarVisible,
-                        isWindowPinned: $isWindowPinned
+                        isWindowPinned: $isWindowPinned,
+                        shortcutManager: shortcutManager
                     )
                     .frame(width: listWidth, height: geometry.size.height)
                     
@@ -114,6 +116,60 @@ struct ContentView: View {
         }
         .background(SidebarView.backgroundColor)
         .preferredColorScheme(.dark)
+        .onAppear {
+            setupKeyboardShortcuts()
+        }
+    }
+    
+    // MARK: - 快捷键设置
+    private func setupKeyboardShortcuts() {
+        // 分类切换快捷键
+        shortcutManager.registerHandler(for: .selectHistory) {
+            selectedCategory = .history
+        }
+        
+        shortcutManager.registerHandler(for: .selectFavorites) {
+            selectedCategory = .favorites
+        }
+        
+        shortcutManager.registerHandler(for: .selectText) {
+            selectedCategory = .text
+        }
+        
+        shortcutManager.registerHandler(for: .selectImages) {
+            selectedCategory = .images
+        }
+        
+        shortcutManager.registerHandler(for: .selectLinks) {
+            selectedCategory = .links
+        }
+        
+        shortcutManager.registerHandler(for: .selectFiles) {
+            selectedCategory = .files
+        }
+        
+        shortcutManager.registerHandler(for: .selectMail) {
+            selectedCategory = .mail
+        }
+        
+        // 窗口控制快捷键
+        shortcutManager.registerHandler(for: .closeWindow) {
+            // 关闭窗口的逻辑将在AppDelegate中处理
+            if let window = NSApp.keyWindow {
+                window.orderOut(nil)
+            }
+        }
+        
+        shortcutManager.registerHandler(for: .toggleSidebar) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isSidebarVisible.toggle()
+            }
+        }
+        
+        shortcutManager.registerHandler(for: .toggleWindowPin) {
+            isWindowPinned.toggle()
+            // 这里可以添加窗口置顶的逻辑
+        }
     }
 }
 

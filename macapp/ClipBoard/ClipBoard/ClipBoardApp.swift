@@ -35,6 +35,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover?
     private var window: NSWindow?
     private var eventMonitor: Any?
+    private var keyEventMonitor: Any?
+    private var shortcutManager = KeyboardShortcutManager.shared
     
     // 用于保存窗口大小的 UserDefaults keys
     private let windowWidthKey = "ClipBoard.WindowWidth"
@@ -52,6 +54,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 设置全局事件监听器，用于检测窗口失去焦点
         setupEventMonitor()
+        
+        // 设置键盘事件监听器
+        setupKeyboardEventMonitor()
         
         // 设置全局快捷键
         setupGlobalHotkeys()
@@ -196,6 +201,42 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
+    private func setupKeyboardEventMonitor() {
+        // 监听本地键盘事件（当窗口有焦点时）
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            guard let self = self, let window = self.window, window.isVisible else { return event }
+            
+            let keyEquivalent = event.charactersIgnoringModifiers ?? ""
+            let modifiers = self.convertNSModifiersToEventModifiers(event.modifierFlags)
+            
+            // 让快捷键管理器处理事件
+            if self.shortcutManager.handleKeyEvent(keyEquivalent: keyEquivalent, modifiers: modifiers) {
+                return nil // 消费该事件
+            }
+            
+            return event // 不处理，继续传递
+        }
+    }
+    
+    private func convertNSModifiersToEventModifiers(_ nsModifiers: NSEvent.ModifierFlags) -> EventModifiers {
+        var modifiers: EventModifiers = []
+        
+        if nsModifiers.contains(.command) {
+            modifiers.insert(.command)
+        }
+        if nsModifiers.contains(.shift) {
+            modifiers.insert(.shift)
+        }
+        if nsModifiers.contains(.option) {
+            modifiers.insert(.option)
+        }
+        if nsModifiers.contains(.control) {
+            modifiers.insert(.control)
+        }
+        
+        return modifiers
+    }
+    
     private func setupGlobalHotkeys() {
         // 这里可以添加全局快捷键支持，比如 Cmd+Shift+V 打开剪贴板
         // 由于需要额外的权限和复杂性，这里暂时留空
@@ -251,6 +292,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 清理事件监听器
         if let eventMonitor = eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
+        }
+        if let keyEventMonitor = keyEventMonitor {
+            NSEvent.removeMonitor(keyEventMonitor)
         }
         NSApp.terminate(nil)
     }
