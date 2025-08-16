@@ -334,7 +334,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 window.center()
             }
 
-            // 温和地显示窗口，不强制激活应用
+            // 激活应用以确保窗口能够响应键盘输入
+            NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             
             // 确保窗口能够接收键盘输入
