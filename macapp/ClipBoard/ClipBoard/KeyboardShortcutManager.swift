@@ -93,7 +93,7 @@ class KeyboardShortcutManager: ObservableObject {
     }
     
     // 处理键盘事件的主要方法
-    func handleKeyEvent(keyEquivalent: String, modifiers: EventModifiers) -> Bool {
+    func handleKeyEvent(keyEquivalent: String, modifiers: SwiftUI.EventModifiers) -> Bool {
         for action in KeyboardShortcutAction.allCases {
             if action.keyEquivalent == keyEquivalent && action.modifiers == modifiers {
                 if shouldHandleShortcut(action) {
@@ -113,6 +113,10 @@ class KeyboardShortcutManager: ObservableObject {
     // 按类别获取快捷键
     func getShortcutsByCategory() -> [String: [KeyboardShortcutInfo]] {
         return [
+            "全局快捷键": [
+                .toggleApp
+            ].compactMap { registeredShortcuts[$0] },
+            
             "分类切换": [
                 .selectHistory, .selectFavorites, .selectText, .selectImages, 
                 .selectLinks, .selectFiles, .selectMail

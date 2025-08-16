@@ -9,6 +9,9 @@ import SwiftUI
 import AppKit
 
 enum KeyboardShortcutAction: CaseIterable {
+    // 全局快捷键
+    case toggleApp
+    
     // 分类切换
     case selectHistory
     case selectFavorites
@@ -50,6 +53,7 @@ enum KeyboardShortcutAction: CaseIterable {
     
     var keyEquivalent: String {
         switch self {
+        case .toggleApp: return "v"
         case .selectHistory: return "1"
         case .selectFavorites: return "2"
         case .selectText: return "3"
@@ -82,8 +86,10 @@ enum KeyboardShortcutAction: CaseIterable {
         }
     }
     
-    var modifiers: EventModifiers {
+    var modifiers: SwiftUI.EventModifiers {
         switch self {
+        case .toggleApp:
+            return [.command, .shift]
         case .selectHistory, .selectFavorites, .selectText, .selectImages, .selectLinks, .selectFiles, .selectMail:
             return .command
         case .navigateUp, .navigateDown, .selectItem:
@@ -111,6 +117,7 @@ enum KeyboardShortcutAction: CaseIterable {
     
     var description: String {
         switch self {
+        case .toggleApp: return "显示/隐藏剪贴板窗口"
         case .selectHistory: return "切换到历史记录"
         case .selectFavorites: return "切换到收藏夹"
         case .selectText: return "切换到文本"
@@ -144,7 +151,7 @@ enum KeyboardShortcutAction: CaseIterable {
     }
 }
 
-extension EventModifiers {
+extension SwiftUI.EventModifiers {
     var displayString: String {
         var result = ""
         if contains(.control) { result += "⌃" }

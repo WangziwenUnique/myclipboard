@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AppKit
+import Carbon
 
 // 自定义窗口类，允许无边框窗口接收键盘输入
 class KeyboardAccessibleWindow: NSWindow {
@@ -37,6 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventMonitor: Any?
     private var keyEventMonitor: Any?
     private var shortcutManager = KeyboardShortcutManager.shared
+    private var globalHotKeyRef: EventHotKeyRef?
     
     // 用于保存窗口大小的 UserDefaults keys
     private let windowWidthKey = "ClipBoard.WindowWidth"
@@ -218,8 +220,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    private func convertNSModifiersToEventModifiers(_ nsModifiers: NSEvent.ModifierFlags) -> EventModifiers {
-        var modifiers: EventModifiers = []
+    private func convertNSModifiersToEventModifiers(_ nsModifiers: NSEvent.ModifierFlags) -> SwiftUI.EventModifiers {
+        var modifiers: SwiftUI.EventModifiers = []
         
         if nsModifiers.contains(.command) {
             modifiers.insert(.command)
@@ -238,9 +240,62 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func setupGlobalHotkeys() {
-        // 这里可以添加全局快捷键支持，比如 Cmd+Shift+V 打开剪贴板
-        // 由于需要额外的权限和复杂性，这里暂时留空
-        // 在实际应用中，可以使用第三方库如 HotKey 或 MASShortcut
+        // 注册全局快捷键 Shift+Cmd+V
+        registerGlobalHotKey()
+    }
+    
+    private func registerGlobalHotKey() {
+        let hotKeyId = EventHotKeyID(signature: OSType(0x53484356), id: 1) // 'SHCV' for Shift+Cmd+V
+        let modifiers = UInt32(shiftKey | cmdKey)
+        let keyCode = UInt32(9) // V key
+        
+        var eventSpec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: OSType(kEventHotKeyPressed))
+        
+        // 安装事件处理器
+        let selfPtr = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        
+        InstallEventHandler(GetApplicationEventTarget(), { (nextHandler, theEvent, userData) -> OSStatus in
+            guard let userData = userData else { return noErr }
+            let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+            
+            var hotKeyId = EventHotKeyID()
+            GetEventParameter(theEvent, OSType(kEventParamDirectObject), OSType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyId)
+            
+            if hotKeyId.signature == OSType(0x53484356) && hotKeyId.id == 1 {
+                DispatchQueue.main.async {
+                    appDelegate.handleGlobalHotKey()
+                }
+            }
+            
+            return noErr
+        }, 1, &eventSpec, selfPtr, nil)
+        
+        // 注册热键
+        let status = RegisterEventHotKey(keyCode, modifiers, hotKeyId, GetApplicationEventTarget(), 0, &globalHotKeyRef)
+        
+        if status != noErr {
+            print("Failed to register global hotkey with status: \(status)")
+        } else {
+            print("Successfully registered global hotkey Shift+Cmd+V")
+        }
+    }
+    
+    private func handleGlobalHotKey() {
+        // 处理全局快捷键 Shift+Cmd+V
+        if let window = window {
+            if window.isVisible {
+                hideWindow()
+            } else {
+                showMainWindow()
+            }
+        }
+    }
+    
+    private func unregisterGlobalHotKey() {
+        if let hotKeyRef = globalHotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            globalHotKeyRef = nil
+        }
     }
     
     @objc private func toggleWindow() {
@@ -296,7 +351,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let keyEventMonitor = keyEventMonitor {
             NSEvent.removeMonitor(keyEventMonitor)
         }
+        // 清理全局快捷键
+        unregisterGlobalHotKey()
         NSApp.terminate(nil)
+    }
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        // 应用即将退出时清理资源
+        unregisterGlobalHotKey()
     }
 }
 
