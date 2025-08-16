@@ -267,6 +267,16 @@ struct ClipboardListView: View {
         }
         .background(SidebarView.backgroundColor)
         .onAppear {
+            // 每次窗口显示时重置选择索引到第一条
+            currentSelectedIndex = 0
+            if !filteredItems.isEmpty {
+                selectedItem = filteredItems[0]
+            }
+            
+            // 窗口显示时自动聚焦搜索框
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isSearchFocused = true
+            }
             setupListKeyboardShortcuts()
         }
         .onChange(of: filteredItems) { items in
@@ -374,7 +384,7 @@ struct ClipboardListView: View {
     }
     
     private func selectCurrentItem() {
-        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        guard !filteredItems.isEmpty else { return }
         let item = filteredItems[currentSelectedIndex]
         clipboardManager.copyToClipboard(item.content)
         
