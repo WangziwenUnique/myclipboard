@@ -44,6 +44,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private let windowWidthKey = "ClipBoard.WindowWidth"
     private let windowHeightKey = "ClipBoard.WindowHeight"
     
+    // 用于跟踪前一个激活应用
+    private var previousApp: NSRunningApplication?
+    
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 首先设置激活策略，确保应用不显示在 Dock 中
         NSApp.setActivationPolicy(.accessory)
@@ -310,6 +313,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func showMainWindow() {
         if let window = window {
+            // 记录当前激活的应用（显示窗口前）
+            previousApp = NSWorkspace.shared.frontmostApplication
+            
             // 获取主屏幕
             if let screen = NSScreen.main {
                 // 计算屏幕中心位置
@@ -328,8 +334,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 window.center()
             }
 
-            // 先激活应用，确保第一次点击即可聚焦输入框
-            NSApp.activate(ignoringOtherApps: true)
+            // 温和地显示窗口，不强制激活应用
             window.makeKeyAndOrderFront(nil)
             
             // 确保窗口能够接收键盘输入
@@ -341,6 +346,68 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let window = window {
             window.orderOut(nil)
         }
+    }
+    
+    // 恢复前一个应用的激活状态并执行粘贴
+    func restorePreviousAppAndPaste() {
+        guard let previousApp = previousApp else { 
+            // 如果没有记录前一个应用，只关闭窗口
+            hideWindow()
+            return 
+        }
+        
+        // 检查前一个应用是否仍在运行
+        guard previousApp.isActive || NSWorkspace.shared.runningApplications.contains(previousApp) else {
+            // 如果前一个应用已关闭，只关闭窗口
+            hideWindow()
+            return
+        }
+        
+        // 先隐藏当前窗口
+        hideWindow()
+        
+        // 延迟确保窗口完全隐藏
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // 激活前一个应用
+            let activated = previousApp.activate(options: [])
+            
+            if activated {
+                // 延迟确保应用切换完成，然后执行粘贴
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    self.simulatePasteCommand()
+                }
+            } else {
+                print("Failed to activate previous app: \(previousApp.bundleIdentifier ?? "unknown")")
+            }
+        }
+    }
+    
+    // 模拟 Command+V 粘贴操作
+    private func simulatePasteCommand() {
+        // 创建 Command+V 按键事件
+        let source = CGEventSource(stateID: .hidSystemState)
+        
+        // 按下 Command 键
+        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true) // 0x37 是 Command 键
+        cmdDown?.flags = .maskCommand
+        
+        // 按下 V 键
+        let vDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) // 0x09 是 V 键
+        vDown?.flags = .maskCommand
+        
+        // 释放 V 键
+        let vUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
+        vUp?.flags = .maskCommand
+        
+        // 释放 Command 键
+        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false)
+        
+        // 发送事件序列
+        let location = CGEventTapLocation.cghidEventTap
+        cmdDown?.post(tap: location)
+        vDown?.post(tap: location)
+        vUp?.post(tap: location)
+        cmdUp?.post(tap: location)
     }
     
     @objc private func quitApp() {

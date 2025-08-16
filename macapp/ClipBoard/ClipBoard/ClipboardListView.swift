@@ -375,9 +375,14 @@ struct ClipboardListView: View {
         let item = filteredItems[currentSelectedIndex]
         clipboardManager.copyToClipboard(item.content)
         
-        // 关闭窗口
-        if let window = NSApp.keyWindow {
-            window.orderOut(nil)
+        // 调用AppDelegate的方法恢复前一个应用并执行粘贴
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+            appDelegate.restorePreviousAppAndPaste()
+        } else {
+            // 如果无法获取AppDelegate，则只关闭窗口
+            if let window = NSApp.keyWindow {
+                window.orderOut(nil)
+            }
         }
     }
     
