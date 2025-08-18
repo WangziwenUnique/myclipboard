@@ -16,6 +16,7 @@ extension Notification.Name {
     static let selectCurrentItem = Notification.Name("clipboard.selectCurrentItem")
     static let selectItemByNumber = Notification.Name("clipboard.selectItemByNumber")
     static let resetSelection = Notification.Name("clipboard.resetSelection")
+    static let updateSearchText = Notification.Name("clipboard.updateSearchText")
 }
 
 // 自定义窗口类，允许无边框窗口接收键盘输入
@@ -330,9 +331,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             36, 53,           // Enter, Esc
             126, 125, 123, 124, // 方向键（上下左右）
             18, 19, 20, 21, 23, 22, 26, 28, 25, // 数字键 1-9
-            // 暂时不包含字母键，避免影响搜索输入
+            // 字母键 A-Z
+            0, 1, 2, 3, 5, 4, 6, 7, 8, 9, 11, 45, 46, 43, 47, 44, 12, 13, 14, 15, 17, 16, 32, 34, 35, 31,
+            // 输入相关按键
             49, 51,           // Space, Backspace
             48,               // Tab
+            27, 24, 33, 30,   // -, =, [, ]
+            41, 39, 42,       // ;, ', \
+            43, 47, 44,       // ,, /, .
+            50,               // `
         ]
         
         return relevantKeyCodes.contains(keyCode)
@@ -388,10 +395,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         case 36: // Enter
             print("   ⏎ Enter键 - 选择当前项")
             DispatchQueue.main.async {
-                if let hostingController = self.window?.contentViewController as? NSHostingController<ClipboardListView> {
-                    // 通过通知触发选择操作
-                    NotificationCenter.default.post(name: .selectCurrentItem, object: nil)
-                }
+                NotificationCenter.default.post(name: .selectCurrentItem, object: nil)
             }
             return true
             
@@ -424,10 +428,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return true
             
+        case 51: // Backspace
+            print("   ⌫ 退格键 - 删除字符")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .updateSearchText, object: ["action": "backspace"])
+            }
+            return true
+            
+        case 49: // Space
+            print("   ␣ 空格键 - 输入空格")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .updateSearchText, object: ["action": "append", "character": " "])
+            }
+            return true
+            
+        // 字母键处理
+        case 0...31, 32...50: // 字母键和其他可输入字符
+            if let character = keyCodeToCharacter(keyCode, modifiers: modifiers) {
+                print("   ✏️ 输入字符: '\(character)'")
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .updateSearchText, object: ["action": "append", "character": character])
+                }
+                return true
+            }
+            return false
+            
         default:
             print("   ❓ 未支持的keyCode: \(keyCode)")
             return false
         }
+    }
+    
+    // 将keyCode转换为字符
+    private func keyCodeToCharacter(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> String? {
+        // 基础字母键映射 (QWERTY键盘布局)
+        let keyMap: [UInt16: String] = [
+            // 第一行：Q W E R T Y U I O P
+            12: "q", 13: "w", 14: "e", 15: "r", 17: "t", 16: "y", 32: "u", 34: "i", 31: "o", 35: "p",
+            // 第二行：A S D F G H J K L
+            0: "a", 1: "s", 2: "d", 3: "f", 5: "g", 4: "h", 38: "j", 40: "k", 37: "l",
+            // 第三行：Z X C V B N M
+            6: "z", 7: "x", 8: "c", 9: "v", 11: "b", 45: "n", 46: "m",
+            // 数字键
+            29: "0", 18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9",
+            // 符号键
+            27: "-", 24: "=", 33: "[", 30: "]", 42: "\\", 41: ";", 39: "'", 43: ",", 47: ".", 44: "/", 50: "`"
+        ]
+        
+        guard let baseChar = keyMap[keyCode] else {
+            return nil
+        }
+        
+        // 处理大写（Shift修饰键）
+        if modifiers.contains(.shift) {
+            return baseChar.uppercased()
+        }
+        
+        return baseChar
     }
     
     private func convertNSModifiersToEventModifiers(_ nsModifiers: NSEvent.ModifierFlags) -> SwiftUI.EventModifiers {

@@ -49,17 +49,29 @@ struct HighlightedText: View {
         var result: [TextPart] = []
         var lastEnd = 0
         
+        // 使用NSString来安全处理索引，避免Swift String索引转换问题
+        let nsString = parts as NSString
+        
         for match in matches {
+            // 验证索引边界，跳过无效匹配
+            guard match.range.location >= 0,
+                  match.range.location <= nsString.length,
+                  match.range.location + match.range.length <= nsString.length else {
+                print("⚠️ 跳过无效匹配: \(match.range)")
+                continue
+            }
+            
             // 添加匹配前的文本
             if match.range.location > lastEnd {
-                let beforeText = String(parts[parts.index(parts.startIndex, offsetBy: lastEnd)..<parts.index(parts.startIndex, offsetBy: match.range.location)])
+                let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
+                let beforeText = nsString.substring(with: beforeRange)
                 if !beforeText.isEmpty {
                     result.append(TextPart(id: UUID(), text: AnyView(Text(beforeText).foregroundColor(normalColor))))
                 }
             }
             
             // 添加高亮的匹配文本
-            let matchText = String(parts[parts.index(parts.startIndex, offsetBy: match.range.location)..<parts.index(parts.startIndex, offsetBy: match.range.location + match.range.length)])
+            let matchText = nsString.substring(with: match.range)
             result.append(TextPart(id: UUID(), text: AnyView(Text(matchText)
                 .foregroundColor(highlightTextColor)
                 .padding(.horizontal, 2)
@@ -70,8 +82,9 @@ struct HighlightedText: View {
         }
         
         // 添加剩余文本
-        if lastEnd < parts.count {
-            let remainingText = String(parts[parts.index(parts.startIndex, offsetBy: lastEnd)...])
+        if lastEnd < nsString.length {
+            let remainingRange = NSRange(location: lastEnd, length: nsString.length - lastEnd)
+            let remainingText = nsString.substring(with: remainingRange)
             if !remainingText.isEmpty {
                 result.append(TextPart(id: UUID(), text: AnyView(Text(remainingText).foregroundColor(normalColor))))
             }
@@ -177,9 +190,11 @@ struct ClipboardListView: View {
     @Binding var isWindowPinned: Bool
     @ObservedObject var shortcutManager: KeyboardShortcutManager
     @State private var searchText = ""
+    @State private var debouncedSearchText = "" // 防抖后的搜索文本
     @State private var sortConfig = SortConfiguration()
     @State private var isSearchFocused = false
     @State private var currentSelectedIndex: Int = 0
+    @State private var searchDebounceTimer: Timer?
     
     var filteredItems: [ClipboardItem] {
         let items = clipboardManager.getSortedItems(
@@ -196,13 +211,13 @@ struct ClipboardListView: View {
             appFilteredItems = items
         }
         
-        // 然后按搜索文本筛选
-        if searchText.isEmpty {
+        // 然后按搜索文本筛选（使用防抖后的搜索文本）
+        if debouncedSearchText.isEmpty {
             return appFilteredItems
         } else {
             return appFilteredItems.filter { item in
-                item.content.localizedCaseInsensitiveContains(searchText) ||
-                item.sourceApp.localizedCaseInsensitiveContains(searchText)
+                item.content.localizedCaseInsensitiveContains(debouncedSearchText) ||
+                item.sourceApp.localizedCaseInsensitiveContains(debouncedSearchText)
             }
         }
     }
@@ -227,10 +242,10 @@ struct ClipboardListView: View {
                 .frame(height: 0.5)
             
             if filteredItems.isEmpty {
-                if searchText.isEmpty {
+                if debouncedSearchText.isEmpty {
                     EmptyStateView(category: category)
                 } else {
-                    SearchEmptyStateView(searchText: searchText)
+                    SearchEmptyStateView(searchText: debouncedSearchText)
                 }
             } else {
                 ScrollView {
@@ -239,7 +254,7 @@ struct ClipboardListView: View {
                             ClipboardItemRow(
                                 item: item,
                                 isSelected: selectedItem?.id == item.id,
-                                searchText: searchText
+                                searchText: debouncedSearchText
                             ) {
                                 // 鼠标点击时同步更新索引和选择项
                                 if let index = filteredItems.firstIndex(of: item) {
@@ -282,10 +297,8 @@ struct ClipboardListView: View {
                 selectedItem = nil
             }
             
-            // 窗口显示时自动聚焦搜索框
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isSearchFocused = true
-            }
+            // 窗口显示时重置搜索框
+            isSearchFocused = true
             setupListKeyboardShortcuts()
             setupNotificationObservers()
         }
@@ -306,6 +319,15 @@ struct ClipboardListView: View {
         .onChange(of: isSearchFocused) { focused in
             shortcutManager.isSearchFocused = focused
             shortcutManager.isListFocused = !focused
+        }
+        .onChange(of: searchText) { newSearchText in
+            // 防抖搜索文本更新，避免频繁的搜索过滤
+            searchDebounceTimer?.invalidate()
+            searchDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { _ in
+                DispatchQueue.main.async {
+                    debouncedSearchText = newSearchText
+                }
+            }
         }
     }
     
@@ -612,6 +634,86 @@ struct ClipboardItemRow: View {
     }
 }
 
+// 单例光标管理器，避免多个Timer导致的性能问题
+class CursorManager: ObservableObject {
+    static let shared = CursorManager()
+    @Published var showCursor = true
+    private var timer: Timer?
+    private var activeInputs: Set<UUID> = []
+    
+    private init() {}
+    
+    func registerInput(_ id: UUID) {
+        activeInputs.insert(id)
+        startBlinkingIfNeeded()
+    }
+    
+    func unregisterInput(_ id: UUID) {
+        activeInputs.remove(id)
+        stopBlinkingIfNeeded()
+    }
+    
+    private func startBlinkingIfNeeded() {
+        guard timer == nil, !activeInputs.isEmpty else { return }
+        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.1)) {
+                    self.showCursor.toggle()
+                }
+            }
+        }
+    }
+    
+    private func stopBlinkingIfNeeded() {
+        guard activeInputs.isEmpty else { return }
+        timer?.invalidate()
+        timer = nil
+        showCursor = true // 重置为显示状态
+    }
+}
+
+struct CustomTextInput: View {
+    @Binding var text: String
+    @StateObject private var cursorManager = CursorManager.shared
+    @State private var inputId = UUID()
+    let placeholder: String
+    
+    var body: some View {
+        ZStack(alignment: .leading) {
+            // 背景placeholder层 - 只在空文本且光标隐藏时显示
+            if text.isEmpty && !cursorManager.showCursor {
+                Text(placeholder)
+                    .foregroundColor(.gray)
+                    .font(.system(size: 14))
+            }
+            
+            // 内容和光标层
+            HStack(spacing: 2) {
+                // 只有当有内容时才显示文本
+                if !text.isEmpty {
+                    Text(text)
+                        .foregroundColor(.white)
+                        .font(.system(size: 14))
+                }
+                
+                // 光标始终在正确位置显示
+                if cursorManager.showCursor {
+                    Text("|")
+                        .foregroundColor(.white)
+                        .font(.system(size: 14))
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear {
+            cursorManager.registerInput(inputId)
+        }
+        .onDisappear {
+            cursorManager.unregisterInput(inputId)
+        }
+    }
+}
+
 struct SearchBar: View {
     @Binding var text: String
     @Binding var isSidebarVisible: Bool
@@ -619,7 +721,8 @@ struct SearchBar: View {
     @Binding var sortConfig: SortConfiguration
     @Binding var isSearchFocused: Bool
     @State private var showShortcutsPopup = false
-    @FocusState private var textFieldFocused: Bool
+    @State private var searchTextObserver: NSObjectProtocol?
+    @State private var debounceTimer: Timer?
     
     var body: some View {
         HStack(spacing: 12) {
@@ -642,13 +745,12 @@ struct SearchBar: View {
                     .font(.system(size: 16))
                     .frame(width: 16, height: 16)
                 
-                TextField("Type to search...", text: $text)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .foregroundColor(.white)
-                    .focused($textFieldFocused)
+                CustomTextInput(text: $text, placeholder: "Type to search...")
                 
                 if !text.isEmpty {
-                    Button(action: { text = "" }) {
+                    Button(action: { 
+                        NotificationCenter.default.post(name: .updateSearchText, object: ["action": "clear"])
+                    }) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.gray)
                             .font(.system(size: 16))
@@ -724,28 +826,57 @@ struct SearchBar: View {
         }
         .padding(.horizontal, 4)
         .onAppear {
-            // 窗口显示时自动聚焦搜索框
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                textFieldFocused = true
-            }
+            // 设置搜索文本更新监听器
+            setupSearchTextUpdateListener()
         }
-        .onChange(of: isSearchFocused) {
-            textFieldFocused = isSearchFocused
+        .onDisappear {
+            // 清理通知监听器和防抖定时器
+            cleanupSearchTextUpdateListener()
+            debounceTimer?.invalidate()
+            debounceTimer = nil
         }
-        .onChange(of: textFieldFocused) {
-            isSearchFocused = textFieldFocused
-        }
-        .background(
-            // 隐藏的快捷键处理
-            Button("") {
-                if textFieldFocused {
-                    // 全选搜索框文本
-                    NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+    }
+    
+    private func setupSearchTextUpdateListener() {
+        // 先清理已存在的监听器，避免重复添加
+        cleanupSearchTextUpdateListener()
+        
+        searchTextObserver = NotificationCenter.default.addObserver(
+            forName: .updateSearchText,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let userInfo = notification.object as? [String: Any],
+                  let action = userInfo["action"] as? String else { return }
+            
+            // 使用防抖机制更新搜索文本，避免过度频繁的UI更新
+            self.debounceTimer?.invalidate()
+            self.debounceTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: false) { _ in
+                DispatchQueue.main.async {
+                    switch action {
+                    case "append":
+                        if let character = userInfo["character"] as? String {
+                            text.append(character)
+                        }
+                    case "backspace":
+                        if !text.isEmpty {
+                            text.removeLast()
+                        }
+                    case "clear":
+                        text = ""
+                    default:
+                        break
+                    }
                 }
             }
-            .keyboardShortcut("a", modifiers: .command)
-            .hidden()
-        )
+        }
+    }
+    
+    private func cleanupSearchTextUpdateListener() {
+        if let observer = searchTextObserver {
+            NotificationCenter.default.removeObserver(observer)
+            searchTextObserver = nil
+        }
     }
 }
 
