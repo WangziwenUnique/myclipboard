@@ -82,7 +82,7 @@ class KeyboardShortcutManager: ObservableObject {
         case .navigateUp, .navigateDown, .jumpToTop, .jumpToBottom, 
              .selectItem1, .selectItem2, .selectItem3, .selectItem4, .selectItem5,
              .selectItem6, .selectItem7, .selectItem8, .selectItem9:
-            return isListFocused && !isSearchFocused
+            return true // 允许在任何状态下进行列表导航
         case .selectItem:
             return true // 回车键在任何状态下都可以使用
         case .focusSearch:
@@ -101,6 +101,7 @@ class KeyboardShortcutManager: ObservableObject {
         for action in KeyboardShortcutAction.allCases {
             if action.keyEquivalent == keyEquivalent && action.modifiers == modifiers {
                 if shouldHandleShortcut(action) {
+                    print("⚡ 执行快捷键：\(action)")
                     handleShortcut(action)
                     return true
                 }
