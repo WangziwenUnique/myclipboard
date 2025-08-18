@@ -241,7 +241,11 @@ struct ClipboardListView: View {
                                 isSelected: selectedItem?.id == item.id,
                                 searchText: searchText
                             ) {
-                                selectedItem = item
+                                // 鼠标点击时同步更新索引和选择项
+                                if let index = filteredItems.firstIndex(of: item) {
+                                    print("🖱️ [ClipboardListView] 鼠标点击项目，索引: \(index)")
+                                    updateSelection(to: index)
+                                }
                             }
                             .contextMenu {
                                 Button("Copy") {
@@ -267,10 +271,15 @@ struct ClipboardListView: View {
         }
         .background(SidebarView.backgroundColor)
         .onAppear {
+            print("👁️ [ClipboardListView] onAppear 被调用")
             // 每次窗口显示时重置选择索引到第一条
-            currentSelectedIndex = 0
             if !filteredItems.isEmpty {
-                selectedItem = filteredItems[0]
+                print("   - 重置选择到第一项")
+                updateSelection(to: 0)
+            } else {
+                print("   - 列表为空，重置索引为0")
+                currentSelectedIndex = 0
+                selectedItem = nil
             }
             
             // 窗口显示时自动聚焦搜索框
@@ -278,6 +287,7 @@ struct ClipboardListView: View {
                 isSearchFocused = true
             }
             setupListKeyboardShortcuts()
+            setupNotificationObservers()
         }
         .onChange(of: filteredItems) { items in
             // 更新快捷键管理器的列表状态
@@ -289,8 +299,8 @@ struct ClipboardListView: View {
             
             // 如果当前选择的索引超出范围，重置为0
             if currentSelectedIndex >= items.count && !items.isEmpty {
-                currentSelectedIndex = 0
-                selectedItem = items[0]
+                print("⚠️ [ClipboardListView] 索引超出范围，重置到第一项")
+                updateSelection(to: 0)
             }
         }
         .onChange(of: isSearchFocused) { focused in
@@ -370,27 +380,80 @@ struct ClipboardListView: View {
         }
     }
     
+    // MARK: - 选择管理方法
+    private func updateSelection(to index: Int) {
+        guard !filteredItems.isEmpty, index >= 0, index < filteredItems.count else {
+            print("   - ❌ 无效的选择索引: \(index), 列表长度: \(filteredItems.count)")
+            return
+        }
+        
+        let oldIndex = currentSelectedIndex
+        currentSelectedIndex = index
+        selectedItem = filteredItems[index]
+        
+        print("   - 🔄 选择更新：\(oldIndex) -> \(currentSelectedIndex)")
+        print("   - 📋 selectedItem.id: \(selectedItem?.id.uuidString ?? "nil")")
+        
+        // 验证同步状态
+        validateSelectionSync()
+    }
+    
+    private func validateSelectionSync() {
+        let isIndexValid = currentSelectedIndex >= 0 && currentSelectedIndex < filteredItems.count
+        let isItemSync = isIndexValid && filteredItems[currentSelectedIndex].id == selectedItem?.id
+        
+        if !isIndexValid {
+            print("   - ⚠️ 索引不合法: \(currentSelectedIndex), 范围: 0..<\(filteredItems.count)")
+        } else if !isItemSync {
+            print("   - ⚠️ 项目不同步: 索引\(currentSelectedIndex)对应\(filteredItems[currentSelectedIndex].id.uuidString)，但selectedItem是\(selectedItem?.id.uuidString ?? "nil")")
+        } else {
+            print("   - ✅ 选择状态同步正常")
+        }
+    }
+    
     // MARK: - 导航辅助方法
     private func navigateUp() {
-        guard !filteredItems.isEmpty, !isSearchFocused else { return }
-        currentSelectedIndex = max(0, currentSelectedIndex - 1)
-        selectedItem = filteredItems[currentSelectedIndex]
+        print("⬆️ [ClipboardListView] navigateUp() 被调用")
+        print("   - filteredItems.count: \(filteredItems.count)")
+        print("   - isSearchFocused: \(isSearchFocused)")
+        print("   - currentSelectedIndex: \(currentSelectedIndex)")
+        
+        guard !filteredItems.isEmpty else { 
+            print("   - ❌ 导航条件不满足，跳过")
+            return 
+        }
+        
+        let newIndex = max(0, currentSelectedIndex - 1)
+        updateSelection(to: newIndex)
+        print("   - ✅ 向上导航完成")
     }
     
     private func navigateDown() {
-        guard !filteredItems.isEmpty, !isSearchFocused else { return }
-        currentSelectedIndex = min(filteredItems.count - 1, currentSelectedIndex + 1)
-        selectedItem = filteredItems[currentSelectedIndex]
+        print("⬇️ [ClipboardListView] navigateDown() 被调用")
+        print("   - filteredItems.count: \(filteredItems.count)")
+        print("   - isSearchFocused: \(isSearchFocused)")
+        print("   - currentSelectedIndex: \(currentSelectedIndex)")
+        
+        guard !filteredItems.isEmpty else { 
+            print("   - ❌ 导航条件不满足，跳过")
+            return 
+        }
+        
+        let newIndex = min(filteredItems.count - 1, currentSelectedIndex + 1)
+        updateSelection(to: newIndex)
+        print("   - ✅ 向下导航完成")
     }
     
     private func selectCurrentItem() {
         guard !filteredItems.isEmpty else { return }
         let item = filteredItems[currentSelectedIndex]
+        
+        // 将选中内容复制到系统剪贴板
         clipboardManager.copyToClipboard(item.content)
         
-        // 调用AppDelegate的方法恢复前一个应用并执行粘贴
+        // 直接粘贴到当前激活的应用
         if let appDelegate = NSApp.delegate as? AppDelegate {
-            appDelegate.restorePreviousAppAndPaste()
+            appDelegate.performDirectPaste()
         } else {
             // 如果无法获取AppDelegate，则只关闭窗口
             if let window = NSApp.keyWindow {
@@ -400,22 +463,19 @@ struct ClipboardListView: View {
     }
     
     private func jumpToTop() {
-        guard !filteredItems.isEmpty, !isSearchFocused else { return }
-        currentSelectedIndex = 0
-        selectedItem = filteredItems[0]
+        guard !filteredItems.isEmpty else { return }
+        updateSelection(to: 0)
     }
     
     private func jumpToBottom() {
-        guard !filteredItems.isEmpty, !isSearchFocused else { return }
-        currentSelectedIndex = filteredItems.count - 1
-        selectedItem = filteredItems[currentSelectedIndex]
+        guard !filteredItems.isEmpty else { return }
+        updateSelection(to: filteredItems.count - 1)
     }
     
     private func selectItemByNumber(_ number: Int) {
-        guard !filteredItems.isEmpty, !isSearchFocused else { return }
+        guard !filteredItems.isEmpty else { return }
         if let index = shortcutManager.getListIndexForNumber(number) {
-            currentSelectedIndex = index
-            selectedItem = filteredItems[index]
+            updateSelection(to: index)
         }
     }
     
@@ -426,22 +486,85 @@ struct ClipboardListView: View {
     
     private func deleteCurrentItem() {
         guard let item = selectedItem else { return }
+        print("🗑️ [ClipboardListView] 删除当前项目，索引: \(currentSelectedIndex)")
         clipboardManager.deleteItem(item)
         
-        // 选择下一个或上一个项目
+        // 删除后重新选择适当的项目
         if !filteredItems.isEmpty {
-            if currentSelectedIndex >= filteredItems.count {
-                currentSelectedIndex = max(0, filteredItems.count - 1)
-            }
-            if currentSelectedIndex < filteredItems.count {
-                selectedItem = filteredItems[currentSelectedIndex]
-            }
+            let newIndex = min(currentSelectedIndex, filteredItems.count - 1)
+            print("   - 删除后重新选择索引: \(newIndex)")
+            updateSelection(to: newIndex)
+        } else {
+            print("   - 列表为空，清空选择")
+            currentSelectedIndex = 0
+            selectedItem = nil
         }
     }
     
     private func toggleCurrentItemFavorite() {
         guard let item = selectedItem else { return }
         clipboardManager.toggleFavorite(for: item)
+    }
+    
+    // 设置通知监听器（用于全局快捷键处理）
+    private func setupNotificationObservers() {
+        print("🔧 [ClipboardListView] 设置通知监听器")
+        
+        NotificationCenter.default.addObserver(
+            forName: .navigateUp,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📤 [ClipboardListView] 收到向上导航通知")
+            self.navigateUp()
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: .navigateDown,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📤 [ClipboardListView] 收到向下导航通知")
+            self.navigateDown()
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: .selectCurrentItem,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📤 [ClipboardListView] 收到选择当前项通知")
+            self.selectCurrentItem()
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: .selectItemByNumber,
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let number = notification.object as? Int {
+                print("📤 [ClipboardListView] 收到数字选择通知: \(number)")
+                self.selectItemByNumber(number)
+            }
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: .resetSelection,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📤 [ClipboardListView] 收到重置选择通知")
+            if !self.filteredItems.isEmpty {
+                print("   - 重置选择到第一项")
+                self.updateSelection(to: 0)
+            } else {
+                print("   - 列表为空，重置索引为0")
+                self.currentSelectedIndex = 0
+                self.selectedItem = nil
+            }
+        }
+        
+        print("✅ [ClipboardListView] 通知监听器设置完成")
     }
 }
 

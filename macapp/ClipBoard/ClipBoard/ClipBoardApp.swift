@@ -9,6 +9,15 @@ import SwiftUI
 import AppKit
 import Carbon
 
+// 通知名称定义
+extension Notification.Name {
+    static let navigateUp = Notification.Name("clipboard.navigateUp")
+    static let navigateDown = Notification.Name("clipboard.navigateDown")
+    static let selectCurrentItem = Notification.Name("clipboard.selectCurrentItem")
+    static let selectItemByNumber = Notification.Name("clipboard.selectItemByNumber")
+    static let resetSelection = Notification.Name("clipboard.resetSelection")
+}
+
 // 自定义窗口类，允许无边框窗口接收键盘输入
 class KeyboardAccessibleWindow: NSWindow {
     override var canBecomeKey: Bool {
@@ -16,6 +25,10 @@ class KeyboardAccessibleWindow: NSWindow {
     }
     
     override var canBecomeMain: Bool {
+        return true
+    }
+    
+    override var acceptsFirstResponder: Bool {
         return true
     }
 }
@@ -36,16 +49,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover?
     private var window: NSWindow?
     private var eventMonitor: Any?
-    private var keyEventMonitor: Any?
+    private var eventTap: CFMachPort? // CGEventTap 用于真正拦截键盘事件
     private var shortcutManager = KeyboardShortcutManager.shared
     private var globalHotKeyRef: EventHotKeyRef?
+    
+    // 防抖机制相关
+    private var lastHotKeyTime: Date = Date.distantPast
+    private let hotKeyDebounceInterval: TimeInterval = 0.3 // 300ms防抖
+    
+    // 事件去重相关
+    private var lastKeyEvent: (keyCode: UInt16, timestamp: Date) = (0, Date.distantPast)
+    private let keyEventDebounceInterval: TimeInterval = 0.1 // 100ms去重
     
     // 用于保存窗口大小的 UserDefaults keys
     private let windowWidthKey = "ClipBoard.WindowWidth"
     private let windowHeightKey = "ClipBoard.WindowHeight"
     
-    // 用于跟踪前一个激活应用
-    private var previousApp: NSRunningApplication?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 首先设置激活策略，确保应用不显示在 Dock 中
@@ -60,8 +79,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 设置全局事件监听器，用于检测窗口失去焦点
         setupEventMonitor()
         
-        // 设置键盘事件监听器
-        setupKeyboardEventMonitor()
+        // 检查辅助功能权限
+        checkAccessibilityPermissions()
+        
+        // 设置全局键盘事件监听器（使用 CGEventTap）
+        setupGlobalKeyboardEventMonitor()
         
         // 设置全局快捷键
         setupGlobalHotkeys()
@@ -145,11 +167,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window?.isReleasedWhenClosed = false
         window?.delegate = self
         
-        // 设置窗口行为，确保不显示在 Dock 中，但允许键盘输入
-        window?.collectionBehavior = [.transient, .ignoresCycle, .fullScreenAuxiliary]
-        window?.level = .floating
+        // 设置浮层窗口行为：确保不影响其他应用的激活状态
+        window?.collectionBehavior = [.transient, .fullScreenAuxiliary, .stationary]
+        // 使用更高的窗口层级确保在全屏应用上方显示
+        window?.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.modalPanelWindow)))
         
-        // 注意：canBecomeKey 是只读属性，通过设置窗口样式来确保可以接收键盘输入
+        // 避免窗口意外获得焦点，完全依赖全局监听器
+        window?.hidesOnDeactivate = false
         
         // 设置无边框窗口的额外属性
         window?.backgroundColor = NSColor.clear
@@ -206,20 +230,203 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    private func setupKeyboardEventMonitor() {
-        // 监听本地键盘事件（当窗口有焦点时）
-        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
-            guard let self = self, let window = self.window, window.isVisible else { return event }
+    private func setupGlobalKeyboardEventMonitor() {
+        // 检查辅助功能权限
+        guard AXIsProcessTrusted() else {
+            print("❌ 无辅助功能权限，CGEventTap无法正常工作")
+            return
+        }
+        
+        // 创建 CGEventTap 用于真正拦截键盘事件
+        let eventMask = (1 << CGEventType.keyDown.rawValue)
+        
+        // 创建事件回调
+        let callback: CGEventTapCallBack = { (proxy, type, event, refcon) in
+            // 从 refcon 获取 AppDelegate 实例
+            guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
+            let appDelegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
             
-            let keyEquivalent = event.charactersIgnoringModifiers ?? ""
-            let modifiers = self.convertNSModifiersToEventModifiers(event.modifierFlags)
+            // 调用实例方法处理事件
+            return appDelegate.handleCGKeyEvent(proxy: proxy, type: type, event: event)
+        }
+        
+        // 获取 self 的指针
+        let selfPtr = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
+        
+        // 创建事件tap
+        eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: CGEventMask(eventMask),
+            callback: callback,
+            userInfo: selfPtr
+        )
+        
+        guard let eventTap = eventTap else {
+            print("❌ CGEventTap 创建失败")
+            return
+        }
+        
+        // 创建运行循环源
+        let runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
+        
+        // 添加到当前运行循环
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        
+        // 启用事件tap
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+        
+        print("✅ CGEventTap 已设置并启用（真正拦截模式）")
+    }
+    
+    // CGEventTap 回调处理方法
+    private func handleCGKeyEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        // 只处理按键按下事件
+        guard type == .keyDown else {
+            return Unmanaged.passUnretained(event)
+        }
+        
+        // 检查窗口是否可见
+        guard let window = window, window.isVisible else {
+            // 窗口不可见时，不拦截任何事件
+            return Unmanaged.passUnretained(event)
+        }
+        
+        // 获取按键信息
+        let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        let flags = event.flags
+        
+        print("🎯 [CGEventTap] 检测到按键：keyCode=\(keyCode)")
+        
+        // 检查是否是剪贴板相关按键
+        if isClipboardRelevantKeyCode(keyCode) {
+            print("   - ✅ 剪贴板相关按键，拦截处理")
             
-            // 让快捷键管理器处理事件
-            if self.shortcutManager.handleKeyEvent(keyEquivalent: keyEquivalent, modifiers: modifiers) {
-                return nil // 消费该事件
+            // 转换修饰键
+            let modifiers = convertCGModifiersToEventModifiers(flags)
+            
+            // 处理按键
+            let handled = handleKeyCodeDirectly(keyCode, modifiers: modifiers)
+            
+            if handled {
+                print("   - ✅ 按键已处理，消费事件")
+                // 返回 nil 表示消费这个事件，不再传播
+                return nil
+            } else {
+                print("   - ❌ 按键未处理，继续传播")
+                return Unmanaged.passUnretained(event)
             }
+        } else {
+            print("   - ➡️ 非剪贴板按键，继续传播")
+            // 不是剪贴板相关按键，正常传播
+            return Unmanaged.passUnretained(event)
+        }
+    }
+    
+    // 基于 keyCode 判断是否是clipboard相关的按键
+    private func isClipboardRelevantKeyCode(_ keyCode: UInt16) -> Bool {
+        let relevantKeyCodes: [UInt16] = [
+            36, 53,           // Enter, Esc
+            126, 125, 123, 124, // 方向键（上下左右）
+            18, 19, 20, 21, 23, 22, 26, 28, 25, // 数字键 1-9
+            // 暂时不包含字母键，避免影响搜索输入
+            49, 51,           // Space, Backspace
+            48,               // Tab
+        ]
+        
+        return relevantKeyCodes.contains(keyCode)
+    }
+    
+    // 转换 CGEventFlags 到 SwiftUI.EventModifiers
+    private func convertCGModifiersToEventModifiers(_ cgFlags: CGEventFlags) -> SwiftUI.EventModifiers {
+        var modifiers: SwiftUI.EventModifiers = []
+        
+        if cgFlags.contains(.maskCommand) {
+            modifiers.insert(.command)
+        }
+        if cgFlags.contains(.maskShift) {
+            modifiers.insert(.shift)
+        }
+        if cgFlags.contains(.maskAlternate) {
+            modifiers.insert(.option)
+        }
+        if cgFlags.contains(.maskControl) {
+            modifiers.insert(.control)
+        }
+        
+        return modifiers
+    }
+    
+    // 判断是否是clipboard相关的按键（诊断模式：更宽松的判断）
+    private func isClipboardRelevantKey(_ event: NSEvent) -> Bool {
+        let keyCode = event.keyCode
+        
+        print("   🔍 检查按键相关性：keyCode=\(keyCode)")
+        
+        // 常用导航和操作键（扩大范围用于诊断）
+        let relevantKeyCodes: [UInt16] = [
+            36, 53,           // Enter, Esc
+            126, 125, 123, 124, // 方向键（上下左右）
+            18, 19, 20, 21, 23, 22, 26, 28, 25, // 数字键 1-9
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, // 字母键
+            49, 51,           // Space, Backspace
+            48,               // Tab
+        ]
+        
+        let isRelevant = relevantKeyCodes.contains(keyCode)
+        print("   🔍 按键\(keyCode)\(isRelevant ? "相关" : "不相关")")
+        
+        return isRelevant
+    }
+    
+    // 基于keyCode直接处理按键（绕过字符匹配问题）
+    private func handleKeyCodeDirectly(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
+        print("   🔧 直接处理keyCode=\(keyCode)")
+        
+        switch keyCode {
+        case 36: // Enter
+            print("   ⏎ Enter键 - 选择当前项")
+            DispatchQueue.main.async {
+                if let hostingController = self.window?.contentViewController as? NSHostingController<ClipboardListView> {
+                    // 通过通知触发选择操作
+                    NotificationCenter.default.post(name: .selectCurrentItem, object: nil)
+                }
+            }
+            return true
             
-            return event // 不处理，继续传递
+        case 53: // Esc
+            print("   ⛔ Esc键 - 关闭窗口")
+            DispatchQueue.main.async {
+                self.hideWindow()
+            }
+            return true
+            
+        case 125: // 下箭头
+            print("   ⬇️ 下箭头 - 向下导航")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .navigateDown, object: nil)
+            }
+            return true
+            
+        case 126: // 上箭头
+            print("   ⬆️ 上箭头 - 向上导航")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .navigateUp, object: nil)
+            }
+            return true
+            
+        case 18...26: // 数字键 1-9
+            let number = Int(keyCode - 17) // keyCode 18 = 数字1
+            print("   🔢 数字键\(number) - 快速选择")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .selectItemByNumber, object: number)
+            }
+            return true
+            
+        default:
+            print("   ❓ 未支持的keyCode: \(keyCode)")
+            return false
         }
     }
     
@@ -265,9 +472,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             GetEventParameter(theEvent, OSType(kEventParamDirectObject), OSType(typeEventHotKeyID), nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKeyId)
             
             if hotKeyId.signature == OSType(0x53484356) && hotKeyId.id == 1 {
-                DispatchQueue.main.async {
-                    appDelegate.handleGlobalHotKey()
-                }
+                // 直接调用，热键处理器已在主线程运行
+                appDelegate.handleGlobalHotKey()
             }
             
             return noErr
@@ -284,11 +490,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func handleGlobalHotKey() {
+        // 防抖机制：避免快速重复触发
+        let currentTime = Date()
+        if currentTime.timeIntervalSince(lastHotKeyTime) < hotKeyDebounceInterval {
+            print("🚫 全局热键防抖：忽略重复调用")
+            return
+        }
+        lastHotKeyTime = currentTime
+        
+        print("⚡ 处理全局快捷键 Shift+Cmd+V")
+        
         // 处理全局快捷键 Shift+Cmd+V
         if let window = window {
             if window.isVisible {
+                print("📋 窗口已显示，隐藏窗口")
                 hideWindow()
             } else {
+                print("📋 窗口未显示，显示窗口")
                 showMainWindow()
             }
         }
@@ -313,8 +531,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     @objc private func showMainWindow() {
         if let window = window {
-            // 记录当前激活的应用（显示窗口前）
-            previousApp = NSWorkspace.shared.frontmostApplication
+            print("🚀 准备显示主窗口")
             
             // 获取主屏幕
             if let screen = NSScreen.main {
@@ -334,12 +551,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 window.center()
             }
 
-            // 激活应用以确保窗口能够响应键盘输入
-            NSApp.activate(ignoringOtherApps: true)
-            window.makeKeyAndOrderFront(nil)
+            print("🚀 显示浮层窗口（纯浮层模式）")
             
-            // 确保窗口能够接收键盘输入
-            window.makeFirstResponder(window.contentView)
+            // 确保窗口在最高层级
+            window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.modalPanelWindow)))
+            
+            // 纯浮层显示：绝不激活应用或改变焦点
+            // 使用orderFront而不是makeKeyAndOrderFront，避免获得焦点
+            window.orderFront(nil)
+            
+            // 强制将窗口移到最前端（在所有桌面空间中可见）
+            window.orderFrontRegardless()
+            
+            // 窗口显示后，发送重置选择索引的通知
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                print("📤 发送重置选择索引通知")
+                NotificationCenter.default.post(name: .resetSelection, object: nil)
+            }
+            
+            print("✅ 纯浮层窗口显示完成，依赖全局监听器处理快捷键")
         }
     }
     
@@ -349,66 +579,80 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     
-    // 恢复前一个应用的激活状态并执行粘贴
-    func restorePreviousAppAndPaste() {
-        guard let previousApp = previousApp else { 
-            // 如果没有记录前一个应用，只关闭窗口
-            hideWindow()
-            return 
-        }
-        
-        // 检查前一个应用是否仍在运行
-        guard previousApp.isActive || NSWorkspace.shared.runningApplications.contains(previousApp) else {
-            // 如果前一个应用已关闭，只关闭窗口
-            hideWindow()
-            return
-        }
-        
-        // 先隐藏当前窗口
+    // 直接粘贴到当前激活的应用
+    func performDirectPaste() {
+        // 先隐藏窗口
         hideWindow()
         
-        // 延迟确保窗口完全隐藏
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            // 激活前一个应用
-            let activated = previousApp.activate(options: [])
-            
-            if activated {
-                // 延迟确保应用切换完成，然后执行粘贴
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    self.simulatePasteCommand()
-                }
-            } else {
-                print("Failed to activate previous app: \(previousApp.bundleIdentifier ?? "unknown")")
-            }
+        // 短暂延迟确保窗口隐藏，然后直接粘贴
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            self.performPasteOperation()
         }
     }
     
-    // 模拟 Command+V 粘贴操作
-    private func simulatePasteCommand() {
-        // 创建 Command+V 按键事件
-        let source = CGEventSource(stateID: .hidSystemState)
+    // 执行粘贴操作 - 使用AppleScript作为备选方案
+    private func performPasteOperation() {
+        // 首先尝试使用AppleScript执行粘贴
+        let script = """
+            tell application "System Events"
+                keystroke "v" using command down
+            end tell
+        """
         
-        // 按下 Command 键
-        let cmdDown = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: true) // 0x37 是 Command 键
-        cmdDown?.flags = .maskCommand
+        var error: NSDictionary?
+        if let appleScript = NSAppleScript(source: script) {
+            appleScript.executeAndReturnError(&error)
+            if let error = error {
+                print("AppleScript paste failed: \(error)")
+                // 如果AppleScript失败，回退到CGEvent
+                fallbackPasteWithCGEvent()
+            }
+        } else {
+            // 如果无法创建AppleScript，回退到CGEvent
+            fallbackPasteWithCGEvent()
+        }
+    }
+    
+    // 备选的CGEvent粘贴方法 - 使用更简洁的实现
+    private func fallbackPasteWithCGEvent() {
+        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
         
-        // 按下 V 键
-        let vDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) // 0x09 是 V 键
-        vDown?.flags = .maskCommand
+        // 创建Command+V组合键事件
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false)
         
-        // 释放 V 键
-        let vUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-        vUp?.flags = .maskCommand
+        keyDown?.flags = .maskCommand
+        keyUp?.flags = .maskCommand
         
-        // 释放 Command 键
-        let cmdUp = CGEvent(keyboardEventSource: source, virtualKey: 0x37, keyDown: false)
+        // 发送按键事件
+        keyDown?.post(tap: .cghidEventTap)
+        keyUp?.post(tap: .cghidEventTap)
+    }
+    
+    // 检查辅助功能权限
+    private func checkAccessibilityPermissions() {
+        let trusted = AXIsProcessTrusted()
         
-        // 发送事件序列
-        let location = CGEventTapLocation.cghidEventTap
-        cmdDown?.post(tap: location)
-        vDown?.post(tap: location)
-        vUp?.post(tap: location)
-        cmdUp?.post(tap: location)
+        if !trusted {
+            print("⚠️ 需要辅助功能权限才能使用全局快捷键")
+            
+            // 提示用户授权辅助功能权限
+            let alert = NSAlert()
+            alert.messageText = "需要辅助功能权限"
+            alert.informativeText = "ClipBoard需要辅助功能权限来响应全局快捷键。请在系统偏好设置 > 安全性与隐私 > 隐私 > 辅助功能中添加ClipBoard。"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "打开系统偏好设置")
+            alert.addButton(withTitle: "稍后设置")
+            
+            let response = alert.runModal()
+            if response == .alertFirstButtonReturn {
+                // 打开系统偏好设置的辅助功能页面
+                let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
+                NSWorkspace.shared.open(url)
+            }
+        } else {
+            print("✅ 辅助功能权限已授权")
+        }
     }
     
     @objc private func quitApp() {
@@ -416,9 +660,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let eventMonitor = eventMonitor {
             NSEvent.removeMonitor(eventMonitor)
         }
-        if let keyEventMonitor = keyEventMonitor {
-            NSEvent.removeMonitor(keyEventMonitor)
-        }
+        // 清理 CGEventTap
+        cleanupEventTap()
         // 清理全局快捷键
         unregisterGlobalHotKey()
         NSApp.terminate(nil)
@@ -426,7 +669,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationWillTerminate(_ notification: Notification) {
         // 应用即将退出时清理资源
+        cleanupEventTap()
         unregisterGlobalHotKey()
+    }
+    
+    // 清理 CGEventTap
+    private func cleanupEventTap() {
+        if let eventTap = eventTap {
+            CGEvent.tapEnable(tap: eventTap, enable: false)
+            self.eventTap = nil
+            print("🧹 CGEventTap 已清理")
+        }
     }
 }
 
