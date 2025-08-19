@@ -16,7 +16,8 @@ extension Notification.Name {
     static let selectCurrentItem = Notification.Name("clipboard.selectCurrentItem")
     static let selectItemByNumber = Notification.Name("clipboard.selectItemByNumber")
     static let resetSelection = Notification.Name("clipboard.resetSelection")
-    static let updateSearchText = Notification.Name("clipboard.updateSearchText")
+    static let textInputCommand = Notification.Name("clipboard.textInputCommand")
+    static let copyCurrentItem = Notification.Name("clipboard.copyCurrentItem")
 }
 
 // 自定义窗口类，允许无边框窗口接收键盘输入
@@ -281,7 +282,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("✅ CGEventTap 已设置并启用（真正拦截模式）")
     }
     
-    // CGEventTap 回调处理方法
+    // CGEventTap 回调处理方法 - 全拦截策略
     private func handleCGKeyEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         // 只处理按键按下事件
         guard type == .keyDown else {
@@ -297,52 +298,59 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 获取按键信息
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
+        let modifiers = convertCGModifiersToEventModifiers(flags)
         
         print("🎯 [CGEventTap] 检测到按键：keyCode=\(keyCode)")
         
-        // 检查是否是剪贴板相关按键
-        if isClipboardRelevantKeyCode(keyCode) {
-            print("   - ✅ 剪贴板相关按键，拦截处理")
-            
-            // 转换修饰键
-            let modifiers = convertCGModifiersToEventModifiers(flags)
-            
-            // 处理按键
-            let handled = handleKeyCodeDirectly(keyCode, modifiers: modifiers)
-            
+        // 窗口可见时拦截所有按键，分类处理
+        if isClipboardShortcut(keyCode, modifiers: modifiers) {
+            print("   - ⚡ 剪贴板快捷键，执行功能")
+            let handled = handleClipboardShortcut(keyCode, modifiers: modifiers)
             if handled {
-                print("   - ✅ 按键已处理，消费事件")
-                // 返回 nil 表示消费这个事件，不再传播
-                return nil
-            } else {
-                print("   - ❌ 按键未处理，继续传播")
-                return Unmanaged.passUnretained(event)
+                print("   - ✅ 快捷键已处理，消费事件")
+                return nil // 消费事件
             }
         } else {
-            print("   - ➡️ 非剪贴板按键，继续传播")
-            // 不是剪贴板相关按键，正常传播
-            return Unmanaged.passUnretained(event)
+            print("   - ✏️ 文本输入，注入到搜索框")
+            let handled = handleTextInput(keyCode, modifiers: modifiers)
+            if handled {
+                print("   - ✅ 文本输入已处理，消费事件")
+                return nil // 消费事件
+            }
         }
+        
+        print("   - ❌ 按键未处理，继续传播")
+        return Unmanaged.passUnretained(event)
     }
     
-    // 基于 keyCode 判断是否是clipboard相关的按键
-    private func isClipboardRelevantKeyCode(_ keyCode: UInt16) -> Bool {
-        let relevantKeyCodes: [UInt16] = [
-            36, 53,           // Enter, Esc
-            126, 125, 123, 124, // 方向键（上下左右）
-            18, 19, 20, 21, 23, 22, 26, 28, 25, // 数字键 1-9
-            // 字母键 A-Z
-            0, 1, 2, 3, 5, 4, 6, 7, 8, 9, 11, 45, 46, 43, 47, 44, 12, 13, 14, 15, 17, 16, 32, 34, 35, 31,
-            // 输入相关按键
-            49, 51,           // Space, Backspace
-            48,               // Tab
-            27, 24, 33, 30,   // -, =, [, ]
-            41, 39, 42,       // ;, ', \
-            43, 47, 44,       // ,, /, .
-            50,               // `
+    // 判断是否是剪贴板功能快捷键（非文本输入）
+    private func isClipboardShortcut(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
+        // 定义剪贴板的功能快捷键
+        let clipboardShortcuts: [UInt16] = [
+            36,               // Enter - 选择当前项
+            53,               // Esc - 关闭窗口
+            126, 125,         // 上下箭头 - 列表导航
+            18, 19, 20, 21, 23, 22, 26, 28, 25, // 数字键1-9 - 快速选择
         ]
         
-        return relevantKeyCodes.contains(keyCode)
+        // 检查是否是基本快捷键
+        if clipboardShortcuts.contains(keyCode) {
+            return true
+        }
+        
+        // 检查是否是组合快捷键（如 Cmd+C, Cmd+V 等）
+        if modifiers.contains(.command) {
+            switch keyCode {
+            case 8:  // Cmd+C (复制)
+                return true
+            case 9:  // Cmd+V (粘贴)
+                return true
+            default:
+                break
+            }
+        }
+        
+        return false
     }
     
     // 转换 CGEventFlags 到 SwiftUI.EventModifiers
@@ -365,31 +373,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return modifiers
     }
     
-    // 判断是否是clipboard相关的按键（诊断模式：更宽松的判断）
-    private func isClipboardRelevantKey(_ event: NSEvent) -> Bool {
-        let keyCode = event.keyCode
-        
-        print("   🔍 检查按键相关性：keyCode=\(keyCode)")
-        
-        // 常用导航和操作键（扩大范围用于诊断）
-        let relevantKeyCodes: [UInt16] = [
-            36, 53,           // Enter, Esc
-            126, 125, 123, 124, // 方向键（上下左右）
-            18, 19, 20, 21, 23, 22, 26, 28, 25, // 数字键 1-9
-            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, // 字母键
-            49, 51,           // Space, Backspace
-            48,               // Tab
-        ]
-        
-        let isRelevant = relevantKeyCodes.contains(keyCode)
-        print("   🔍 按键\(keyCode)\(isRelevant ? "相关" : "不相关")")
-        
-        return isRelevant
-    }
     
-    // 基于keyCode直接处理按键（绕过字符匹配问题）
-    private func handleKeyCodeDirectly(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
-        print("   🔧 直接处理keyCode=\(keyCode)")
+    // 处理剪贴板功能快捷键（导航、选择等）
+    private func handleClipboardShortcut(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
+        print("   ⚡ 处理快捷键 keyCode=\(keyCode)")
         
         switch keyCode {
         case 36: // Enter
@@ -428,41 +415,63 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return true
             
-        case 51: // Backspace
-            print("   ⌫ 退格键 - 删除字符")
+        // 处理组合快捷键
+        case 8 where modifiers.contains(.command): // Cmd+C
+            print("   📝 Cmd+C - 复制当前项")
             DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .updateSearchText, object: ["action": "backspace"])
+                NotificationCenter.default.post(name: .copyCurrentItem, object: nil)
             }
             return true
             
-        case 49: // Space
-            print("   ␣ 空格键 - 输入空格")
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .updateSearchText, object: ["action": "append", "character": " "])
-            }
-            return true
-            
-        // 字母键处理
-        case 0...31, 32...50: // 字母键和其他可输入字符
-            if let character = keyCodeToCharacter(keyCode, modifiers: modifiers) {
-                print("   ✏️ 输入字符: '\(character)'")
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .updateSearchText, object: ["action": "append", "character": character])
-                }
-                return true
-            }
-            return false
+        case 9 where modifiers.contains(.command): // Cmd+V
+            print("   📋 Cmd+V - 粘贴操作")
+            // 粘贴操作可以由系统处理，或者自定义逻辑
+            return false // 让系统处理
             
         default:
-            print("   ❓ 未支持的keyCode: \(keyCode)")
+            print("   ❓ 未知快捷键: \(keyCode)")
             return false
         }
     }
     
-    // 将keyCode转换为字符
+    // 处理文本输入（所有非快捷键按键）
+    private func handleTextInput(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
+        print("   ✏️ 处理文本输入 keyCode=\(keyCode)")
+        
+        switch keyCode {
+        case 51: // Backspace
+            print("   ⌫ 退格键 - 注入到搜索框")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .textInputCommand, object: ["action": "backspace"])
+            }
+            return true
+            
+        case 49: // Space
+            print("   ␣ 空格键 - 注入到搜索框")
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .textInputCommand, object: ["action": "insert", "character": " "])
+            }
+            return true
+            
+        // 字母、数字、符号等可输入字符
+        default:
+            if let character = keyCodeToCharacter(keyCode, modifiers: modifiers) {
+                print("   ⌨️ 输入字符: '\(character)' - 注入到搜索框")
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .textInputCommand, object: ["action": "insert", "character": character])
+                }
+                return true
+            } else {
+                print("   ❌ 无法转换的按键: \(keyCode)")
+                return false
+            }
+        }
+    }
+    
+    // 将keyCode转换为字符 - 完整支持QWERTY键盘
     private func keyCodeToCharacter(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> String? {
-        // 基础字母键映射 (QWERTY键盘布局)
-        let keyMap: [UInt16: String] = [
+        // 基础字符映射 (QWERTY键盘布局)
+        let basicKeyMap: [UInt16: String] = [
             // 第一行：Q W E R T Y U I O P
             12: "q", 13: "w", 14: "e", 15: "r", 17: "t", 16: "y", 32: "u", 34: "i", 31: "o", 35: "p",
             // 第二行：A S D F G H J K L
@@ -470,21 +479,52 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             // 第三行：Z X C V B N M
             6: "z", 7: "x", 8: "c", 9: "v", 11: "b", 45: "n", 46: "m",
             // 数字键
-            29: "0", 18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9",
-            // 符号键
+            29: "0", 18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9"
+        ]
+        
+        // 符号键映射（基础状态）
+        let symbolKeyMap: [UInt16: String] = [
             27: "-", 24: "=", 33: "[", 30: "]", 42: "\\", 41: ";", 39: "'", 43: ",", 47: ".", 44: "/", 50: "`"
         ]
         
-        guard let baseChar = keyMap[keyCode] else {
+        // Shift+符号键映射
+        let shiftSymbolKeyMap: [UInt16: String] = [
+            // 数字键 + Shift
+            29: ")", 18: "!", 19: "@", 20: "#", 21: "$", 23: "%", 22: "^", 26: "&", 28: "*", 25: "(",
+            // 符号键 + Shift  
+            27: "_", 24: "+", 33: "{", 30: "}", 42: "|", 41: ":", 39: "\"", 43: "<", 47: ">", 44: "?", 50: "~"
+        ]
+        
+        // 处理Shift修饰键
+        if modifiers.contains(.shift) {
+            // 先检查Shift+符号组合
+            if let shiftChar = shiftSymbolKeyMap[keyCode] {
+                return shiftChar
+            }
+            // 再检查字母大写
+            if let basicChar = basicKeyMap[keyCode] {
+                return basicChar.uppercased()
+            }
+        } else {
+            // 没有Shift，检查基础字符
+            if let basicChar = basicKeyMap[keyCode] {
+                return basicChar
+            }
+            // 检查基础符号
+            if let symbolChar = symbolKeyMap[keyCode] {
+                return symbolChar
+            }
+        }
+        
+        // 其他特殊按键处理
+        switch keyCode {
+        case 48: // Tab
+            return "\t"
+        case 36: // Return/Enter
+            return "\n"
+        default:
             return nil
         }
-        
-        // 处理大写（Shift修饰键）
-        if modifiers.contains(.shift) {
-            return baseChar.uppercased()
-        }
-        
-        return baseChar
     }
     
     private func convertNSModifiersToEventModifiers(_ nsModifiers: NSEvent.ModifierFlags) -> SwiftUI.EventModifiers {

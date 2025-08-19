@@ -196,6 +196,10 @@ struct ClipboardListView: View {
     @State private var currentSelectedIndex: Int = 0
     @State private var searchDebounceTimer: Timer?
     
+    // 监听器管理
+    @State private var notificationObservers: [NSObjectProtocol] = []
+    @State private var observersSetup = false
+    
     var filteredItems: [ClipboardItem] {
         let items = clipboardManager.getSortedItems(
             for: category, 
@@ -256,11 +260,10 @@ struct ClipboardListView: View {
                                 isSelected: selectedItem?.id == item.id,
                                 searchText: debouncedSearchText
                             ) {
-                                // 鼠标点击时同步更新索引和选择项
-                                if let index = filteredItems.firstIndex(of: item) {
-                                    print("🖱️ [ClipboardListView] 鼠标点击项目，索引: \(index)")
-                                    updateSelection(to: index)
-                                }
+                                // 鼠标点击时同步更新索引和选择项 - 避免循环引用
+                                guard let index = filteredItems.firstIndex(of: item) else { return }
+                                print("🖱️ [ClipboardListView] 鼠标点击项目，索引: \(index)")
+                                updateSelection(to: index)
                             }
                             .contextMenu {
                                 Button("Copy") {
@@ -300,20 +303,27 @@ struct ClipboardListView: View {
             // 窗口显示时重置搜索框
             isSearchFocused = true
             setupListKeyboardShortcuts()
-            setupNotificationObservers()
+            setupNotificationObserversOnce()
+        }
+        .onDisappear {
+            // 窗口隐藏时清理资源
+            cleanupResources()
         }
         .onChange(of: filteredItems) { items in
-            // 更新快捷键管理器的列表状态
-            shortcutManager.updateListState(
-                focusedOnList: !isSearchFocused,
-                currentIndex: currentSelectedIndex,
-                totalCount: items.count
-            )
-            
-            // 如果当前选择的索引超出范围，重置为0
-            if currentSelectedIndex >= items.count && !items.isEmpty {
-                print("⚠️ [ClipboardListView] 索引超出范围，重置到第一项")
-                updateSelection(to: 0)
+            // 防止频繁更新
+            DispatchQueue.main.async {
+                // 更新快捷键管理器的列表状态
+                shortcutManager.updateListState(
+                    focusedOnList: !isSearchFocused,
+                    currentIndex: currentSelectedIndex,
+                    totalCount: items.count
+                )
+                
+                // 如果当前选择的索引超出范围，重置为0
+                if currentSelectedIndex >= items.count && !items.isEmpty {
+                    print("⚠️ [ClipboardListView] 索引超出范围，重置到第一项")
+                    updateSelection(to: 0)
+                }
             }
         }
         .onChange(of: isSearchFocused) { focused in
@@ -321,13 +331,8 @@ struct ClipboardListView: View {
             shortcutManager.isListFocused = !focused
         }
         .onChange(of: searchText) { newSearchText in
-            // 防抖搜索文本更新，避免频繁的搜索过滤
-            searchDebounceTimer?.invalidate()
-            searchDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { _ in
-                DispatchQueue.main.async {
-                    debouncedSearchText = newSearchText
-                }
-            }
+            // 优化的防抖搜索文本更新
+            updateSearchTextDebounced(newSearchText)
         }
     }
     
@@ -528,11 +533,21 @@ struct ClipboardListView: View {
         clipboardManager.toggleFavorite(for: item)
     }
     
-    // 设置通知监听器（用于全局快捷键处理）
-    private func setupNotificationObservers() {
+    // 设置通知监听器（防止重复注册）
+    private func setupNotificationObserversOnce() {
+        // 防止重复设置
+        guard !observersSetup else {
+            print("⚠️ [ClipboardListView] 监听器已设置，跳过")
+            return
+        }
+        
         print("🔧 [ClipboardListView] 设置通知监听器")
         
-        NotificationCenter.default.addObserver(
+        // 清理旧的监听器
+        cleanupObservers()
+        
+        // 添加新监听器
+        let observer1 = NotificationCenter.default.addObserver(
             forName: .navigateUp,
             object: nil,
             queue: .main
@@ -541,7 +556,7 @@ struct ClipboardListView: View {
             self.navigateUp()
         }
         
-        NotificationCenter.default.addObserver(
+        let observer2 = NotificationCenter.default.addObserver(
             forName: .navigateDown,
             object: nil,
             queue: .main
@@ -550,7 +565,7 @@ struct ClipboardListView: View {
             self.navigateDown()
         }
         
-        NotificationCenter.default.addObserver(
+        let observer3 = NotificationCenter.default.addObserver(
             forName: .selectCurrentItem,
             object: nil,
             queue: .main
@@ -559,7 +574,7 @@ struct ClipboardListView: View {
             self.selectCurrentItem()
         }
         
-        NotificationCenter.default.addObserver(
+        let observer4 = NotificationCenter.default.addObserver(
             forName: .selectItemByNumber,
             object: nil,
             queue: .main
@@ -570,7 +585,7 @@ struct ClipboardListView: View {
             }
         }
         
-        NotificationCenter.default.addObserver(
+        let observer5 = NotificationCenter.default.addObserver(
             forName: .resetSelection,
             object: nil,
             queue: .main
@@ -586,7 +601,55 @@ struct ClipboardListView: View {
             }
         }
         
-        print("✅ [ClipboardListView] 通知监听器设置完成")
+        // 保存监听器引用
+        notificationObservers = [observer1, observer2, observer3, observer4, observer5]
+        observersSetup = true
+        
+        print("✅ [ClipboardListView] 通知监听器设置完成，共\(notificationObservers.count)个")
+    }
+    
+    // 清理监听器
+    private func cleanupObservers() {
+        print("🧹 [ClipboardListView] 清理通知监听器")
+        for observer in notificationObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        notificationObservers.removeAll()
+        observersSetup = false
+        print("✅ [ClipboardListView] 监听器清理完成")
+    }
+    
+    // 清理所有资源
+    private func cleanupResources() {
+        print("🧹 [ClipboardListView] 清理所有资源")
+        
+        // 清理监听器
+        cleanupObservers()
+        
+        // 清理定时器
+        searchDebounceTimer?.invalidate()
+        searchDebounceTimer = nil
+        
+        print("✅ [ClipboardListView] 资源清理完成")
+    }
+    
+    // 优化的防抖搜索更新
+    private func updateSearchTextDebounced(_ newSearchText: String) {
+        // 取消之前的定时器
+        searchDebounceTimer?.invalidate()
+        
+        // 如果新文本为空，立即更新
+        if newSearchText.isEmpty {
+            debouncedSearchText = newSearchText
+            return
+        }
+        
+        // 设置新的防抖定时器
+        searchDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
+            DispatchQueue.main.async {
+                self.debouncedSearchText = newSearchText
+            }
+        }
     }
 }
 
@@ -634,82 +697,168 @@ struct ClipboardItemRow: View {
     }
 }
 
-// 单例光标管理器，避免多个Timer导致的性能问题
-class CursorManager: ObservableObject {
-    static let shared = CursorManager()
-    @Published var showCursor = true
-    private var timer: Timer?
-    private var activeInputs: Set<UUID> = []
-    
-    private init() {}
-    
-    func registerInput(_ id: UUID) {
-        activeInputs.insert(id)
-        startBlinkingIfNeeded()
-    }
-    
-    func unregisterInput(_ id: UUID) {
-        activeInputs.remove(id)
-        stopBlinkingIfNeeded()
-    }
-    
-    private func startBlinkingIfNeeded() {
-        guard timer == nil, !activeInputs.isEmpty else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
-            DispatchQueue.main.async {
-                withAnimation(.easeInOut(duration: 0.1)) {
-                    self.showCursor.toggle()
-                }
-            }
-        }
-    }
-    
-    private func stopBlinkingIfNeeded() {
-        guard activeInputs.isEmpty else { return }
-        timer?.invalidate()
-        timer = nil
-        showCursor = true // 重置为显示状态
-    }
-}
-
-struct CustomTextInput: View {
+// 简化的单行悬浮输入框，通过NotificationCenter接收输入
+struct EnhancedTextField: NSViewRepresentable {
     @Binding var text: String
-    @StateObject private var cursorManager = CursorManager.shared
-    @State private var inputId = UUID()
     let placeholder: String
     
-    var body: some View {
-        ZStack(alignment: .leading) {
-            // 背景placeholder层 - 只在空文本且光标隐藏时显示
-            if text.isEmpty && !cursorManager.showCursor {
-                Text(placeholder)
-                    .foregroundColor(.gray)
-                    .font(.system(size: 14))
+    class CustomTextField: NSTextField {
+        var textBinding: Binding<String>?
+        private var inputObserver: NSObjectProtocol?
+        private var observerSetup = false
+        
+        override func awakeFromNib() {
+            super.awakeFromNib()
+            setupInputListenerOnce()
+        }
+        
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
+            setupInputListenerOnce()
+        }
+        
+        required init?(coder: NSCoder) {
+            super.init(coder: coder)
+            setupInputListenerOnce()
+        }
+        
+        private func setupInputListenerOnce() {
+            // 防止重复设置
+            guard !observerSetup else { return }
+            
+            print("🔧 [CustomTextField] 设置输入监听器")
+            
+            // 清理旧监听器
+            cleanupObserver()
+            
+            // 设置新监听器
+            inputObserver = NotificationCenter.default.addObserver(
+                forName: .textInputCommand,
+                object: nil,
+                queue: .main
+            ) { [weak self] notification in
+                self?.handleTextInputCommand(notification)
             }
             
-            // 内容和光标层
-            HStack(spacing: 2) {
-                // 只有当有内容时才显示文本
-                if !text.isEmpty {
-                    Text(text)
-                        .foregroundColor(.white)
-                        .font(.system(size: 14))
+            observerSetup = true
+            print("✅ [CustomTextField] 输入监听器设置完成")
+        }
+        
+        private func handleTextInputCommand(_ notification: Notification) {
+            guard let userInfo = notification.object as? [String: Any],
+                  let action = userInfo["action"] as? String else { return }
+            
+            switch action {
+            case "insert":
+                if let character = userInfo["character"] as? String {
+                    insertCharacter(character)
                 }
-                
-                // 光标始终在正确位置显示
-                if cursorManager.showCursor {
-                    Text("|")
-                        .foregroundColor(.white)
-                        .font(.system(size: 14))
-                }
+            case "backspace":
+                performBackspace()
+            default:
+                break
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear {
-            cursorManager.registerInput(inputId)
+        
+        private func insertCharacter(_ character: String) {
+            let newText = stringValue + character
+            updateText(newText)
         }
-        .onDisappear {
-            cursorManager.unregisterInput(inputId)
+        
+        private func performBackspace() {
+            guard !stringValue.isEmpty else { return }
+            let newText = String(stringValue.dropLast())
+            updateText(newText)
+        }
+        
+        private func updateText(_ newText: String) {
+            stringValue = newText
+            textBinding?.wrappedValue = newText
+            // 触发文本变化通知
+            needsDisplay = true
+        }
+        
+        private func cleanupObserver() {
+            if let observer = inputObserver {
+                NotificationCenter.default.removeObserver(observer)
+                inputObserver = nil
+            }
+            observerSetup = false
+        }
+        
+        deinit {
+            print("🧹 [CustomTextField] 释放资源")
+            cleanupObserver()
+        }
+        
+        override var acceptsFirstResponder: Bool {
+            return true
+        }
+        
+        override func becomeFirstResponder() -> Bool {
+            let result = super.becomeFirstResponder()
+            needsDisplay = true
+            return result
+        }
+        
+        // 强制焦点获取方法
+        func forceFocus() {
+            DispatchQueue.main.async {
+                self.window?.makeFirstResponder(self)
+                self.needsDisplay = true
+            }
+        }
+    }
+    
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        let parent: EnhancedTextField
+        
+        init(_ parent: EnhancedTextField) {
+            self.parent = parent
+        }
+        
+        func controlTextDidChange(_ obj: Notification) {
+            if let textField = obj.object as? CustomTextField {
+                parent.text = textField.stringValue
+            }
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        return Coordinator(self)
+    }
+    
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = CustomTextField()
+        
+        // 配置为单行输入框
+        textField.textBinding = $text
+        textField.delegate = context.coordinator
+        textField.placeholderString = placeholder
+        textField.backgroundColor = .clear
+        textField.isBordered = false
+        textField.focusRingType = .none
+        textField.textColor = .white
+        textField.font = NSFont.systemFont(ofSize: 14)
+        
+        // 确保单行显示
+        textField.cell?.wraps = false
+        textField.cell?.isScrollable = true
+        textField.maximumNumberOfLines = 1
+        
+        // 尝试获得焦点
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            textField.forceFocus()
+        }
+        
+        return textField
+    }
+    
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if let textField = nsView as? CustomTextField {
+            if textField.stringValue != text {
+                textField.stringValue = text
+            }
         }
     }
 }
@@ -721,8 +870,6 @@ struct SearchBar: View {
     @Binding var sortConfig: SortConfiguration
     @Binding var isSearchFocused: Bool
     @State private var showShortcutsPopup = false
-    @State private var searchTextObserver: NSObjectProtocol?
-    @State private var debounceTimer: Timer?
     
     var body: some View {
         HStack(spacing: 12) {
@@ -745,11 +892,11 @@ struct SearchBar: View {
                     .font(.system(size: 16))
                     .frame(width: 16, height: 16)
                 
-                CustomTextInput(text: $text, placeholder: "Type to search...")
+                EnhancedTextField(text: $text, placeholder: "Type to search...")
                 
                 if !text.isEmpty {
                     Button(action: { 
-                        NotificationCenter.default.post(name: .updateSearchText, object: ["action": "clear"])
+                        text = ""
                     }) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundColor(.gray)
@@ -825,58 +972,6 @@ struct SearchBar: View {
             }
         }
         .padding(.horizontal, 4)
-        .onAppear {
-            // 设置搜索文本更新监听器
-            setupSearchTextUpdateListener()
-        }
-        .onDisappear {
-            // 清理通知监听器和防抖定时器
-            cleanupSearchTextUpdateListener()
-            debounceTimer?.invalidate()
-            debounceTimer = nil
-        }
-    }
-    
-    private func setupSearchTextUpdateListener() {
-        // 先清理已存在的监听器，避免重复添加
-        cleanupSearchTextUpdateListener()
-        
-        searchTextObserver = NotificationCenter.default.addObserver(
-            forName: .updateSearchText,
-            object: nil,
-            queue: .main
-        ) { notification in
-            guard let userInfo = notification.object as? [String: Any],
-                  let action = userInfo["action"] as? String else { return }
-            
-            // 使用防抖机制更新搜索文本，避免过度频繁的UI更新
-            self.debounceTimer?.invalidate()
-            self.debounceTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: false) { _ in
-                DispatchQueue.main.async {
-                    switch action {
-                    case "append":
-                        if let character = userInfo["character"] as? String {
-                            text.append(character)
-                        }
-                    case "backspace":
-                        if !text.isEmpty {
-                            text.removeLast()
-                        }
-                    case "clear":
-                        text = ""
-                    default:
-                        break
-                    }
-                }
-            }
-        }
-    }
-    
-    private func cleanupSearchTextUpdateListener() {
-        if let observer = searchTextObserver {
-            NotificationCenter.default.removeObserver(observer)
-            searchTextObserver = nil
-        }
     }
 }
 
