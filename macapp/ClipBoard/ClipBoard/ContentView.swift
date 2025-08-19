@@ -8,6 +8,7 @@
 import SwiftUI
 import CoreData
 
+
 struct ContentView: View {
     @StateObject private var clipboardManager = ClipboardManager()
     @ObservedObject private var shortcutManager = KeyboardShortcutManager.shared
@@ -16,6 +17,9 @@ struct ContentView: View {
     @State private var globalTooltip: GlobalTooltipData? = nil
     @State private var isSidebarVisible: Bool = true
     @State private var isWindowPinned: Bool = false
+    
+    // 观察者引用，用于内存清理
+    @State private var observers: [NSObjectProtocol] = []
     
     struct GlobalTooltipData {
         let text: String
@@ -118,6 +122,10 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             setupKeyboardShortcuts()
+            setupNotificationObservers()
+        }
+        .onDisappear {
+            cleanupObservers()
         }
     }
     
@@ -125,40 +133,41 @@ struct ContentView: View {
     private func setupKeyboardShortcuts() {
         // 分类切换快捷键
         shortcutManager.registerHandler(for: .selectHistory) {
+            print("🔥 快捷键⌘1被触发 - 切换到History")
             selectedCategory = .history
         }
         
         shortcutManager.registerHandler(for: .selectFavorites) {
+            print("🔥 快捷键⌘2被触发 - 切换到Favorites")
             selectedCategory = .favorites
         }
         
         shortcutManager.registerHandler(for: .selectText) {
+            print("🔥 快捷键⌘3被触发 - 切换到Text")
             selectedCategory = .text
         }
         
         shortcutManager.registerHandler(for: .selectImages) {
+            print("🔥 快捷键⌘4被触发 - 切换到Images")
             selectedCategory = .images
         }
         
         shortcutManager.registerHandler(for: .selectLinks) {
+            print("🔥 快捷键⌘5被触发 - 切换到Links")
             selectedCategory = .links
         }
         
         shortcutManager.registerHandler(for: .selectFiles) {
+            print("🔥 快捷键⌘6被触发 - 切换到Files")
             selectedCategory = .files
         }
         
         shortcutManager.registerHandler(for: .selectMail) {
+            print("🔥 快捷键⌘7被触发 - 切换到Mail")
             selectedCategory = .mail
         }
         
         // 窗口控制快捷键
-        shortcutManager.registerHandler(for: .closeWindow) {
-            // 关闭窗口的逻辑将在AppDelegate中处理
-            if let window = NSApp.keyWindow {
-                window.orderOut(nil)
-            }
-        }
         
         shortcutManager.registerHandler(for: .toggleSidebar) {
             withAnimation(.easeInOut(duration: 0.2)) {
@@ -169,6 +178,37 @@ struct ContentView: View {
         shortcutManager.registerHandler(for: .toggleWindowPin) {
             isWindowPinned.toggle()
             // 这里可以添加窗口置顶的逻辑
+        }
+    }
+    
+    // MARK: - 通知监听
+    private func setupNotificationObservers() {
+        // 先清理已有观察者
+        cleanupObservers()
+        
+        // 监听分类切换通知
+        let categoryObserver = NotificationCenter.default.addObserver(
+            forName: .categoryChanged,
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let category = notification.object as? ClipboardCategory {
+                print("📱 收到分类切换通知: \(category)")
+                selectedCategory = category
+                selectedApp = nil // 切换分类时清除应用筛选
+            }
+        }
+        
+        observers.append(categoryObserver)
+    }
+    
+    // MARK: - 观察者清理
+    private func cleanupObservers() {
+        let count = observers.count
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+        observers.removeAll()
+        if count > 0 {
+            print("🧹 ContentView 清理了 \(count) 个通知观察者")
         }
     }
 }

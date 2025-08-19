@@ -11,19 +11,25 @@ import Combine
 // 全局单例快捷键管理器
 class KeyboardShortcutManager: ObservableObject {
     static let shared = KeyboardShortcutManager()
-    @Published var registeredShortcuts: [KeyboardShortcutAction: KeyboardShortcutInfo] = [:]
+    
+    // 简化状态管理，移除不必要的 @Published 属性
+    private var registeredShortcuts: [KeyboardShortcutAction: KeyboardShortcutInfo] = [:]
     
     // 全局快捷键处理闭包
-    var actionHandlers: [KeyboardShortcutAction: () -> Void] = [:]
+    private var actionHandlers: [KeyboardShortcutAction: () -> Void] = [:]
     
-    // 当前焦点状态
-    @Published var isSearchFocused: Bool = false
-    @Published var isListFocused: Bool = true
-    @Published var currentListIndex: Int = 0
-    @Published var listItemsCount: Int = 0
+    // O(1)查找表 - 性能优化
+    private var keyCodeLookup: [String: KeyboardShortcutAction] = [:]
+    
+    // 简化的状态，不需要发布更新
+    private var isSearchFocused: Bool = false
+    private var isListFocused: Bool = true
+    private var currentListIndex: Int = 0
+    private var listItemsCount: Int = 0
     
     private init() {
         setupDefaultShortcuts()
+        buildLookupTables()
     }
     
     private func setupDefaultShortcuts() {
@@ -31,6 +37,19 @@ class KeyboardShortcutManager: ObservableObject {
         for action in KeyboardShortcutAction.allCases {
             registeredShortcuts[action] = KeyboardShortcutInfo(action: action)
         }
+    }
+    
+    // 构建O(1)查找表以优化性能
+    private func buildLookupTables() {
+        keyCodeLookup.removeAll()
+        
+        for action in KeyboardShortcutAction.allCases {
+            if let lookupKey = action.lookupKey {
+                keyCodeLookup[lookupKey] = action
+            }
+        }
+        
+        print("🔧 [ShortcutManager] 构建查找表完成，包含 \(keyCodeLookup.count) 个快捷键")
     }
     
     // 注册快捷键处理器
@@ -87,7 +106,7 @@ class KeyboardShortcutManager: ObservableObject {
             return true // 回车键在任何状态下都可以使用
         case .focusSearch:
             return true
-        case .clearSearchOrClose:
+        case .closeWindow:
             return true // 可以在任何状态下使用
         case .toggleFocus:
             return true // 可以在任何状态下使用
@@ -96,17 +115,47 @@ class KeyboardShortcutManager: ObservableObject {
         }
     }
     
-    // 处理键盘事件的主要方法
+    // 处理keyCode事件的主要方法 - O(1)查找优化
+    func handleKeyCode(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
+        let lookupKey = "\(keyCode)_\(modifiers.rawValue)"
+        
+        print("🎯 [ShortcutManager] handleKeyCode: keyCode=\(keyCode), modifiers=\(modifiers), lookupKey=\(lookupKey)")
+        
+        guard let action = keyCodeLookup[lookupKey] else {
+            print("   ❓ 未找到匹配的快捷键动作")
+            return false
+        }
+        
+        print("   ✅ 找到匹配的快捷键动作: \(action)")
+        
+        if shouldHandleShortcut(action) {
+            print("   ⚡ 执行快捷键：\(action)")
+            handleShortcut(action)
+            return true
+        } else {
+            print("   ❌ 快捷键被shouldHandleShortcut阻止")
+            return false
+        }
+    }
+    
+    // 处理键盘事件的兼容方法（保持向后兼容）
     func handleKeyEvent(keyEquivalent: String, modifiers: SwiftUI.EventModifiers) -> Bool {
+        print("🎯 [ShortcutManager] handleKeyEvent: keyEquivalent='\(keyEquivalent)', modifiers=\(modifiers)")
+        
         for action in KeyboardShortcutAction.allCases {
             if action.keyEquivalent == keyEquivalent && action.modifiers == modifiers {
+                print("   ✅ 找到匹配的快捷键动作: \(action)")
                 if shouldHandleShortcut(action) {
-                    print("⚡ 执行快捷键：\(action)")
+                    print("   ⚡ 执行快捷键：\(action)")
                     handleShortcut(action)
                     return true
+                } else {
+                    print("   ❌ 快捷键被shouldHandleShortcut阻止")
+                    return false
                 }
             }
         }
+        print("   ❓ 未找到匹配的快捷键动作")
         return false
     }
     
@@ -134,7 +183,7 @@ class KeyboardShortcutManager: ObservableObject {
             ].compactMap { registeredShortcuts[$0] },
             
             "搜索功能": [
-                .focusSearch, .clearSearchOrClose
+                .focusSearch, .closeWindow
             ].compactMap { registeredShortcuts[$0] },
             
             "操作功能": [
@@ -142,7 +191,7 @@ class KeyboardShortcutManager: ObservableObject {
             ].compactMap { registeredShortcuts[$0] },
             
             "窗口控制": [
-                .closeWindow, .toggleSidebar, .toggleWindowPin
+                .toggleSidebar, .toggleWindowPin
             ].compactMap { registeredShortcuts[$0] }
         ]
     }

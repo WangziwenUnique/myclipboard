@@ -3,41 +3,63 @@ import SwiftUI
 import AppKit
 import CryptoKit
 
-class ClipboardManager: ObservableObject {
+class ClipboardManager: NSObject, ObservableObject {
     @Published var clipboardItems: [ClipboardItem] = []
     @Published var selectedItem: ClipboardItem?
     
-    private var timer: Timer?
     private var lastClipboardContent: String = ""
     private var lastClipboardChangeCount: Int = 0
     private let dataManager = ClipboardDataManager()
     private let maxItems = 1000  // 增加存储上限
     
+    // 性能优化：批量保存和去重
+    private var pendingSave = false
+    private var saveTimer: Timer?
+    
     // 数据存储配置
     private let maxContentSize = 1024 * 1024  // 1MB 最大内容大小
     private let excludedApps = ["Keychain Access", "1Password"]  // 排除的应用
     
-    init() {
+    override init() {
+        super.init()
         loadPersistedData()
         startMonitoring()
     }
     
     deinit {
         stopMonitoring()
+        saveTimer?.invalidate()
     }
     
     private func startMonitoring() {
         // 初始化剪贴板状态
         lastClipboardChangeCount = NSPasteboard.general.changeCount
         
-        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { _ in
-            self.checkClipboard()
-        }
+        // 使用KVO监听剪贴板变化，替代低效的轮询
+        NSPasteboard.general.addObserver(self, 
+                                       forKeyPath: "changeCount", 
+                                       options: [.new], 
+                                       context: nil)
+        
+        print("✅ 剪贴板监控已启动 (KVO)")
     }
     
     private func stopMonitoring() {
-        timer?.invalidate()
-        timer = nil
+        NSPasteboard.general.removeObserver(self, forKeyPath: "changeCount")
+        print("🛑 剪贴板监控已停止")
+    }
+    
+    override func observeValue(forKeyPath keyPath: String?, 
+                              of object: Any?, 
+                              change: [NSKeyValueChangeKey : Any]?, 
+                              context: UnsafeMutableRawPointer?) {
+        if keyPath == "changeCount" {
+            DispatchQueue.main.async {
+                self.checkClipboard()
+            }
+        } else {
+            super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
+        }
     }
     
     private func checkClipboard() {
@@ -475,13 +497,28 @@ class ClipboardManager: ObservableObject {
     }
     
     private func saveDataAsync() {
-        // 在后台线程执行保存操作，避免阻塞UI
-        Task.detached { [weak self] in
+        // 防抖保存：避免频繁保存造成性能问题
+        guard !pendingSave else { return }
+        pendingSave = true
+        
+        saveTimer?.invalidate()
+        saveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
             guard let self = self else { return }
-            do {
-                try await self.dataManager.saveItems(self.clipboardItems)
-            } catch {
-                print("保存数据失败: \(error)")
+            
+            // 在后台线程执行保存操作，避免阻塞UI
+            Task.detached { [weak self] in
+                guard let self = self else { return }
+                do {
+                    try await self.dataManager.saveItems(self.clipboardItems)
+                    await MainActor.run {
+                        self.pendingSave = false
+                    }
+                } catch {
+                    print("保存数据失败: \(error)")
+                    await MainActor.run {
+                        self.pendingSave = false
+                    }
+                }
             }
         }
     }

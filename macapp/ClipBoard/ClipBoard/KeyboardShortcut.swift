@@ -39,7 +39,7 @@ enum KeyboardShortcutAction: CaseIterable {
     
     // 搜索功能
     case focusSearch
-    case clearSearchOrClose
+    case closeWindow
     case toggleFocus
     
     // 操作功能
@@ -48,7 +48,6 @@ enum KeyboardShortcutAction: CaseIterable {
     case toggleFavorite
     
     // 窗口控制
-    case closeWindow
     case toggleSidebar
     case toggleWindowPin
     
@@ -77,12 +76,11 @@ enum KeyboardShortcutAction: CaseIterable {
         case .selectItem8: return "8"
         case .selectItem9: return "9"
         case .focusSearch: return "f"
-        case .clearSearchOrClose: return "\u{001B}"  // ESC
+        case .closeWindow: return "\u{001B}"  // ESC
         case .toggleFocus: return "\t"  // Tab
         case .copyItem: return "c"
         case .deleteItem: return "d"
         case .toggleFavorite: return "b"
-        case .closeWindow: return "w"
         case .toggleSidebar: return "t"
         case .toggleWindowPin: return "p"
         }
@@ -102,13 +100,13 @@ enum KeyboardShortcutAction: CaseIterable {
             return []
         case .focusSearch:
             return .command
-        case .clearSearchOrClose:
+        case .closeWindow:
             return []
         case .toggleFocus:
             return []
         case .copyItem, .deleteItem, .toggleFavorite:
             return .command
-        case .closeWindow, .toggleSidebar, .toggleWindowPin:
+        case .toggleSidebar, .toggleWindowPin:
             return .command
         }
     }
@@ -144,12 +142,11 @@ enum KeyboardShortcutAction: CaseIterable {
         case .selectItem8: return "选择第8项"
         case .selectItem9: return "选择第9项"
         case .focusSearch: return "聚焦搜索框"
-        case .clearSearchOrClose: return "清除搜索或关闭窗口"
+        case .closeWindow: return "关闭窗口"
         case .toggleFocus: return "切换搜索框和列表焦点"
         case .copyItem: return "复制选中项"
         case .deleteItem: return "删除选中项"
         case .toggleFavorite: return "切换收藏状态"
-        case .closeWindow: return "关闭窗口"
         case .toggleSidebar: return "切换侧边栏"
         case .toggleWindowPin: return "切换窗口置顶"
         }
@@ -189,5 +186,84 @@ struct KeyboardShortcutInfo {
     init(action: KeyboardShortcutAction, isEnabled: Bool = true) {
         self.action = action
         self.isEnabled = isEnabled
+    }
+}
+
+// 扩展键盘快捷键以支持数字
+extension KeyboardShortcutAction {
+    static func fromNumber(_ number: Int) -> KeyboardShortcutAction {
+        switch number {
+        case 1: return .selectItem1
+        case 2: return .selectItem2
+        case 3: return .selectItem3
+        case 4: return .selectItem4
+        case 5: return .selectItem5
+        case 6: return .selectItem6
+        case 7: return .selectItem7
+        case 8: return .selectItem8
+        case 9: return .selectItem9
+        default: return .selectItem1
+        }
+    }
+    
+    // keyCode映射 - 统一按键定义的单一数据源
+    var keyCode: UInt16? {
+        switch self {
+        // 基本导航和选择
+        case .selectItem: return 36        // Enter/Return
+        case .closeWindow: return 53 // Esc
+        case .navigateUp: return 126       // 上箭头
+        case .navigateDown: return 125     // 下箭头
+        
+        // 数字键快速选择（直接数字键，无修饰符）
+        case .selectItem1: return 18       // 1
+        case .selectItem2: return 19       // 2
+        case .selectItem3: return 20       // 3
+        case .selectItem4: return 21       // 4
+        case .selectItem5: return 23       // 5
+        case .selectItem6: return 22       // 6
+        case .selectItem7: return 26       // 7
+        case .selectItem8: return 28       // 8
+        case .selectItem9: return 25       // 9
+        
+        // 分类切换（Cmd+数字键）
+        case .selectHistory: return 18     // Cmd+1
+        case .selectFavorites: return 19   // Cmd+2
+        case .selectText: return 20        // Cmd+3
+        case .selectImages: return 21      // Cmd+4
+        case .selectLinks: return 23       // Cmd+5
+        case .selectFiles: return 22       // Cmd+6
+        case .selectMail: return 26        // Cmd+7
+        
+        // 其他功能键
+        case .copyItem: return 8           // Cmd+C
+        case .focusSearch: return 3        // Cmd+F
+        case .deleteItem: return 2         // Cmd+D
+        case .toggleFavorite: return 11    // Cmd+B
+        case .toggleSidebar: return 17     // Cmd+T
+        case .toggleWindowPin: return 35   // Cmd+P
+        
+        // 跳转功能（Cmd+箭头）
+        case .jumpToTop: return 126        // Cmd+↑
+        case .jumpToBottom: return 125     // Cmd+↓
+        
+        // 特殊功能
+        case .toggleFocus: return 48       // Tab
+        
+        // 全局快捷键（在其他地方处理）
+        case .toggleApp: return nil
+        }
+    }
+    
+    // 检查按键和修饰符是否匹配
+    func matches(keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
+        guard let expectedKeyCode = self.keyCode else { return false }
+        return expectedKeyCode == keyCode && self.modifiers == modifiers
+    }
+    
+    // 生成用于快速查找的唯一键
+    var lookupKey: String? {
+        guard let keyCode = self.keyCode else { return nil }
+        return "\(keyCode)_\(modifiers.rawValue)"
     }
 }
