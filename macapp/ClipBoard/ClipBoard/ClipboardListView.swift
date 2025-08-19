@@ -226,66 +226,87 @@ struct ClipboardListView: View {
         }
     }
     
-    var body: some View {
-        VStack(spacing: 0) {
-            // Search bar at the top
-            SearchBar(
-                text: $searchText,
-                isSidebarVisible: $isSidebarVisible,
-                isWindowPinned: $isWindowPinned,
-                sortConfig: $sortConfig,
-                isSearchFocused: $isSearchFocused
-            )
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(SidebarView.backgroundColor)
-            
-            // Separator line
-            Rectangle()
-                .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
-                .frame(height: 0.5)
-            
+    // 拆分复杂的 body，避免编译器类型检查超时
+    private var searchBarSection: some View {
+        SearchBar(
+            text: $searchText,
+            isSidebarVisible: $isSidebarVisible,
+            isWindowPinned: $isWindowPinned,
+            sortConfig: $sortConfig,
+            isSearchFocused: $isSearchFocused
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(SidebarView.backgroundColor)
+    }
+    
+    private var separatorLine: some View {
+        Rectangle()
+            .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
+            .frame(height: 0.5)
+    }
+    
+    private var contentSection: some View {
+        Group {
             if filteredItems.isEmpty {
-                if debouncedSearchText.isEmpty {
-                    EmptyStateView(category: category)
-                } else {
-                    SearchEmptyStateView(searchText: debouncedSearchText)
-                }
+                emptyStateSection
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 1) {
-                        ForEach(filteredItems) { item in
-                            ClipboardItemRow(
-                                item: item,
-                                isSelected: selectedItem?.id == item.id,
-                                searchText: debouncedSearchText
-                            ) {
-                                // 鼠标点击时同步更新索引和选择项 - 避免循环引用
-                                guard let index = filteredItems.firstIndex(of: item) else { return }
-                                print("🖱️ [ClipboardListView] 鼠标点击项目，索引: \(index)")
-                                updateSelection(to: index)
-                            }
-                            .contextMenu {
-                                Button("Copy") {
-                                    clipboardManager.copyToClipboard(item.content)
-                                }
-                                
-                                Button("Delete") {
-                                    clipboardManager.deleteItem(item)
-                                }
-                                
-                                Divider()
-                                
-                                Button(item.isFavorite ? "Remove from Favorites" : "Add to Favorites") {
-                                    clipboardManager.toggleFavorite(for: item)
-                                }
-                            }
+                listSection
+            }
+        }
+    }
+    
+    private var emptyStateSection: some View {
+        Group {
+            if debouncedSearchText.isEmpty {
+                EmptyStateView(category: category)
+            } else {
+                SearchEmptyStateView(searchText: debouncedSearchText)
+            }
+        }
+    }
+    
+    private var listSection: some View {
+        ScrollView {
+            LazyVStack(spacing: 1) {
+                ForEach(filteredItems) { item in
+                    ClipboardItemRow(
+                        item: item,
+                        isSelected: selectedItem?.id == item.id,
+                        searchText: debouncedSearchText
+                    ) {
+                        // 鼠标点击时同步更新索引和选择项
+                        guard let index = filteredItems.firstIndex(of: item) else { return }
+                        print("🖱️ [ClipboardListView] 鼠标点击项目，索引: \(index)")
+                        updateSelection(to: index)
+                    }
+                    .contextMenu {
+                        Button("Copy") {
+                            clipboardManager.copyToClipboard(item.content)
+                        }
+                        
+                        Button("Delete") {
+                            clipboardManager.deleteItem(item)
+                        }
+                        
+                        Divider()
+                        
+                        Button(item.isFavorite ? "Remove from Favorites" : "Add to Favorites") {
+                            clipboardManager.toggleFavorite(for: item)
                         }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 8)
                 }
             }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            searchBarSection
+            separatorLine
+            contentSection
         }
         .background(SidebarView.backgroundColor)
         .onAppear {
@@ -310,20 +331,17 @@ struct ClipboardListView: View {
             cleanupResources()
         }
         .onChange(of: filteredItems) { items in
-            // 防止频繁更新
-            DispatchQueue.main.async {
-                // 更新快捷键管理器的列表状态
-                shortcutManager.updateListState(
-                    focusedOnList: !isSearchFocused,
-                    currentIndex: currentSelectedIndex,
-                    totalCount: items.count
-                )
-                
-                // 如果当前选择的索引超出范围，重置为0
-                if currentSelectedIndex >= items.count && !items.isEmpty {
-                    print("⚠️ [ClipboardListView] 索引超出范围，重置到第一项")
-                    updateSelection(to: 0)
-                }
+            // 更新快捷键管理器的列表状态
+            shortcutManager.updateListState(
+                focusedOnList: !isSearchFocused,
+                currentIndex: currentSelectedIndex,
+                totalCount: items.count
+            )
+            
+            // 如果当前选择的索引超出范围，重置为0
+            if currentSelectedIndex >= items.count && !items.isEmpty {
+                print("⚠️ [ClipboardListView] 索引超出范围，重置到第一项")
+                updateSelection(to: 0)
             }
         }
         .onChange(of: isSearchFocused) { focused in
@@ -637,9 +655,10 @@ struct ClipboardListView: View {
     private func updateSearchTextDebounced(_ newSearchText: String) {
         // 取消之前的定时器
         searchDebounceTimer?.invalidate()
+        searchDebounceTimer = nil
         
-        // 如果新文本为空，立即更新
-        if newSearchText.isEmpty {
+        // 如果新文本为空或与当前防抖文本相同，立即更新
+        if newSearchText.isEmpty || newSearchText == debouncedSearchText {
             debouncedSearchText = newSearchText
             return
         }
@@ -707,6 +726,14 @@ struct EnhancedTextField: NSViewRepresentable {
         private var inputObserver: NSObjectProtocol?
         private var observerSetup = false
         
+        // 防抖相关
+        private var cursorUpdateWorkItem: DispatchWorkItem?
+        private let cursorUpdateDelay: TimeInterval = 0.05 // 50ms防抖
+        
+        // currentEditor 缓存
+        private weak var cachedEditor: NSText?
+        private var editorCacheValid = false
+        
         override func awakeFromNib() {
             super.awakeFromNib()
             setupInputListenerOnce()
@@ -720,6 +747,50 @@ struct EnhancedTextField: NSViewRepresentable {
         required init?(coder: NSCoder) {
             super.init(coder: coder)
             setupInputListenerOnce()
+        }
+        
+        // 获取当前文本编辑器（缓存版本）
+        private var currentEditor: NSText? {
+            // 如果缓存有效且编辑器仍然存在，直接返回缓存
+            if editorCacheValid, let editor = cachedEditor {
+                return editor
+            }
+            
+            // 否则从系统获取新的编辑器
+            let editor = window?.fieldEditor(true, for: self)
+            cachedEditor = editor
+            editorCacheValid = editor != nil
+            return editor
+        }
+        
+        // 清除编辑器缓存
+        private func invalidateEditorCache() {
+            editorCacheValid = false
+            cachedEditor = nil
+        }
+        
+        // 安全获取选择范围
+        func getCurrentSelection() -> NSRange {
+            return currentEditor?.selectedRange ?? NSRange(location: stringValue.count, length: 0)
+        }
+        
+        // 安全设置选择范围
+        func setSelection(_ range: NSRange) {
+            currentEditor?.selectedRange = range
+        }
+        
+        // 防抖的光标位置更新
+        func debouncedSetSelection(_ range: NSRange) {
+            // 取消之前的更新任务
+            cursorUpdateWorkItem?.cancel()
+            
+            // 创建新的更新任务
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.setSelection(range)
+            }
+            
+            cursorUpdateWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + cursorUpdateDelay, execute: workItem)
         }
         
         private func setupInputListenerOnce() {
@@ -761,14 +832,51 @@ struct EnhancedTextField: NSViewRepresentable {
         }
         
         private func insertCharacter(_ character: String) {
-            let newText = stringValue + character
+            let selectedRange = getCurrentSelection()
+            let currentText = stringValue
+            
+            // 在光标位置插入字符
+            let startIndex = currentText.index(currentText.startIndex, offsetBy: min(selectedRange.location, currentText.count))
+            let endIndex = currentText.index(currentText.startIndex, offsetBy: min(selectedRange.location + selectedRange.length, currentText.count))
+            
+            let newText = currentText.replacingCharacters(in: startIndex..<endIndex, with: character)
             updateText(newText)
+            
+            // 设置新的光标位置（插入字符后的位置）
+            let newCursorPosition = selectedRange.location + character.count
+            debouncedSetSelection(NSRange(location: min(newCursorPosition, newText.count), length: 0))
         }
         
         private func performBackspace() {
             guard !stringValue.isEmpty else { return }
-            let newText = String(stringValue.dropLast())
+            
+            let selectedRange = getCurrentSelection()
+            let currentText = stringValue
+            
+            var newText: String
+            var newCursorPosition: Int
+            
+            if selectedRange.length > 0 {
+                // 有选中文本，删除选中的内容
+                let startIndex = currentText.index(currentText.startIndex, offsetBy: selectedRange.location)
+                let endIndex = currentText.index(currentText.startIndex, offsetBy: min(selectedRange.location + selectedRange.length, currentText.count))
+                newText = currentText.replacingCharacters(in: startIndex..<endIndex, with: "")
+                newCursorPosition = selectedRange.location
+            } else if selectedRange.location > 0 {
+                // 删除光标前的一个字符
+                let deleteIndex = currentText.index(currentText.startIndex, offsetBy: selectedRange.location - 1)
+                let endIndex = currentText.index(currentText.startIndex, offsetBy: selectedRange.location)
+                newText = currentText.replacingCharacters(in: deleteIndex..<endIndex, with: "")
+                newCursorPosition = selectedRange.location - 1
+            } else {
+                // 光标在开头，无法删除
+                return
+            }
+            
             updateText(newText)
+            
+            // 设置新的光标位置
+            debouncedSetSelection(NSRange(location: min(newCursorPosition, newText.count), length: 0))
         }
         
         private func updateText(_ newText: String) {
@@ -783,6 +891,11 @@ struct EnhancedTextField: NSViewRepresentable {
                 NotificationCenter.default.removeObserver(observer)
                 inputObserver = nil
             }
+            // 清理防抖任务
+            cursorUpdateWorkItem?.cancel()
+            cursorUpdateWorkItem = nil
+            // 清理编辑器缓存
+            invalidateEditorCache()
             observerSetup = false
         }
         
@@ -796,16 +909,40 @@ struct EnhancedTextField: NSViewRepresentable {
         }
         
         override func becomeFirstResponder() -> Bool {
+            // 成为第一响应者时清除缓存，因为编辑器可能会发生变化
+            invalidateEditorCache()
             let result = super.becomeFirstResponder()
-            needsDisplay = true
+            if result {
+                // 设置光标到文本末尾并显示
+                let textLength = self.stringValue.count
+                debouncedSetSelection(NSRange(location: textLength, length: 0))
+                needsDisplay = true
+            }
+            return result
+        }
+        
+        override func resignFirstResponder() -> Bool {
+            let result = super.resignFirstResponder()
+            if result {
+                // 失去第一响应者时清除缓存
+                invalidateEditorCache()
+                needsDisplay = true
+            }
             return result
         }
         
         // 强制焦点获取方法
         func forceFocus() {
             DispatchQueue.main.async {
-                self.window?.makeFirstResponder(self)
-                self.needsDisplay = true
+                guard let window = self.window else { return }
+                
+                // 设置为第一响应者
+                if window.makeFirstResponder(self) {
+                    // 确保光标位置正确
+                    let textLength = self.stringValue.count
+                    self.debouncedSetSelection(NSRange(location: textLength, length: 0))
+                    self.needsDisplay = true
+                }
             }
         }
     }
@@ -857,7 +994,15 @@ struct EnhancedTextField: NSViewRepresentable {
     func updateNSView(_ nsView: NSTextField, context: Context) {
         if let textField = nsView as? CustomTextField {
             if textField.stringValue != text {
+                // 保存当前光标位置
+                let savedCursorPosition = textField.getCurrentSelection().location
+                
+                // 更新文本
                 textField.stringValue = text
+                
+                // 恢复光标位置 - 使用防抖机制
+                let newPosition = min(savedCursorPosition, text.count)
+                textField.debouncedSetSelection(NSRange(location: newPosition, length: 0))
             }
         }
     }
