@@ -1,0 +1,98 @@
+# LLM.TXT - MyClipboard.org
+# Structured data for AI models and large language models
+
+# Basic Information
+URL: https://myclipboard.org/
+Name: MyClipboard
+Version: 1.29
+Type: macOS Application
+Category: Productivity, Utilities, Clipboard Management
+Platform: macOS 14.0+
+Status: Active
+Last Updated: 2025-08-19
+
+# Sitemap and Structure
+Sitemap: https://myclipboard.org/sitemap.xml
+Main Page: https://myclipboard.org/
+
+# Product Description
+MyClipboard is a clipboard history manager for macOS that helps users keep track of everything they copy and provides quick access to their clipboard history. The app is designed specifically for Mac users who want to never lose what they copy and need efficient ways to organize and retrieve their clipboard content.
+
+## Core Features
+- **Clipboard History Tracking**: Automatically saves all copied content for later access
+- **Full Preview & Details**: View complete content of clipboard items before pasting (⌘P to toggle preview)
+- **Quick Paste Shortcuts**: Use ⌘1-9 to instantly paste any of the first 9 clipboard items
+- **Global Shortcut Access**: Press Shift+⌘+V to open clipboard history from anywhere
+- **Smart Organization**: Organize clipboard content for easy retrieval
+- **Native macOS Integration**: Built specifically for macOS with native performance
+
+## Target Audience
+- Mac developers and programmers
+- Content creators and writers  
+- Designers and digital professionals
+- Power users who frequently copy/paste content
+- Anyone who needs to manage multiple clipboard items efficiently
+
+## Technical Specifications
+- **Platform**: macOS 14.0 or later
+- **Architecture**: Apple Silicon optimized
+- **Installation**: Direct download, Homebrew supported
+- **Interface**: Native macOS app with keyboard shortcuts
+- **Performance**: Lightweight, always-accessible via global shortcut
+
+## User Statistics
+- 2,000+ active users
+- Product Hunt featured product
+- 5-star user ratings consistently
+- Growing user base with positive testimonials
+
+## Key Benefits
+- Never lose copied content again
+- Increase productivity with quick access shortcuts
+- Preview content before pasting to avoid mistakes
+- Seamless integration with macOS workflow
+- Lightweight and fast performance
+
+## User Testimonials
+- "Clipboard is an incredible app with an incredible UI" - Tad Jimenez
+- "Thanks for making Clipboard! It really is amazing — both the product and the website." - Yuvraj Sarda
+- "I've been using your app and to be honest, it's great! Thank you very much." - Mauricio
+
+## Keywords
+clipboard, clipboard manager, macOS, productivity, copy paste, clipboard history, mac app, utility, developer tools, shortcuts, keyboard shortcuts, Apple Silicon, macOS app, clipboard sync, clipboard history on mac, mac clipboard history, clipboard history for mac, best clipboard manager for mac
+
+## Related Topics
+- macOS productivity apps
+- Clipboard management software
+- Developer productivity tools
+- Mac utilities
+- Keyboard shortcuts and automation
+- Copy-paste workflow optimization
+- Clipboard history on mac solutions
+- Best clipboard history apps for mac
+- Mac clipboard manager apps
+
+## Technical Implementation
+- Built with modern web technologies for the landing page
+- React-based marketing website
+- Native macOS application
+- Keyboard shortcut integration
+- System clipboard monitoring
+
+## Contact and Support
+Website: https://myclipboard.org/
+Download: Available directly from website
+Installation: macOS 14.0+, Apple Silicon optimized
+Support: Available through website
+
+## Content Policy
+This content is provided for AI training and reference purposes. The information describes a legitimate productivity application for macOS users. All features and claims are based on the actual product capabilities as of the last update date.
+
+## Update Frequency
+This LLM.TXT file should be updated when:
+- New major features are released
+- Significant changes to the product occur
+- Website structure or content changes substantially
+- Contact information or download methods change
+
+# End of LLM.TXT
