@@ -6,6 +6,7 @@ import CryptoKit
 class ClipboardManager: NSObject, ObservableObject {
     @Published var clipboardItems: [ClipboardItem] = []
     @Published var selectedItem: ClipboardItem?
+    @Published var isMonitoring: Bool = true
     
     private var lastClipboardContent: String = ""
     private var lastClipboardChangeCount: Int = 0
@@ -22,6 +23,10 @@ class ClipboardManager: NSObject, ObservableObject {
     
     override init() {
         super.init()
+        
+        // 从 UserDefaults 加载监控状态
+        isMonitoring = UserDefaults.standard.object(forKey: "clipboardMonitoring") == nil ? true : UserDefaults.standard.bool(forKey: "clipboardMonitoring")
+        
         loadPersistedData()
         startMonitoring()
     }
@@ -63,6 +68,9 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     private func checkClipboard() {
+        // 如果监控被暂停，直接返回
+        guard isMonitoring else { return }
+        
         let pasteboard = NSPasteboard.general
         let currentChangeCount = pasteboard.changeCount
         
@@ -532,6 +540,32 @@ class ClipboardManager: NSObject, ObservableObject {
             clipboardItems = filteredItems
             saveDataAsync()
             print("已清理 \(clipboardItems.count - filteredItems.count) 个过期项目")
+        }
+    }
+    
+    // MARK: - 监控控制
+    
+    func toggleMonitoring() {
+        isMonitoring.toggle()
+        print("\(isMonitoring ? "✅ 剪贴板监控已恢复" : "⏸️ 剪贴板监控已暂停")")
+        
+        // 保存监控状态到 UserDefaults
+        UserDefaults.standard.set(isMonitoring, forKey: "clipboardMonitoring")
+    }
+    
+    func pauseMonitoring() {
+        if isMonitoring {
+            isMonitoring = false
+            print("⏸️ 剪贴板监控已暂停")
+            UserDefaults.standard.set(false, forKey: "clipboardMonitoring")
+        }
+    }
+    
+    func resumeMonitoring() {
+        if !isMonitoring {
+            isMonitoring = true
+            print("✅ 剪贴板监控已恢复")
+            UserDefaults.standard.set(true, forKey: "clipboardMonitoring")
         }
     }
     

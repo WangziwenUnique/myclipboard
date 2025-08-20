@@ -49,87 +49,62 @@ struct HighlightedText: View {
         }
     }
     
+    @ViewBuilder
     private var highlightedTextView: some View {
-        let highlightColor = Color.yellow
-        let highlightTextColor = Color.black
         let normalColor = isSelected ? Color.white : Color.gray
-        
         let parts = text.components(separatedBy: .whitespacesAndNewlines).joined(separator: " ")
-        let regex = try! NSRegularExpression(pattern: NSRegularExpression.escapedPattern(for: searchText), options: .caseInsensitive)
-        let range = NSRange(location: 0, length: parts.utf16.count)
-        let matches = regex.matches(in: parts, options: [], range: range)
         
-        return Group {
-            if !matches.isEmpty {
-                HStack(spacing: 0) {
-                    ForEach(createHighlightedTextParts(from: parts, matches: matches, 
-                                                     highlightColor: highlightColor, 
-                                                     highlightTextColor: highlightTextColor, 
-                                                     normalColor: normalColor), id: \.id) { part in
-                        part.text
-                    }
-                }
+        // 使用简单字符串匹配替代正则表达式
+        if parts.localizedCaseInsensitiveContains(searchText) {
+            createSimpleHighlightedText(
+                text: parts,
+                searchText: searchText,
+                normalColor: normalColor
+            )
+        } else {
+            Text(parts)
                 .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundColor(normalColor)
                 .font(.system(size: 12))
-            } else {
-                Text(text)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .foregroundColor(normalColor)
-                    .font(.system(size: 12))
-            }
         }
     }
     
-    private func createHighlightedTextParts(from parts: String, matches: [NSTextCheckingResult], 
-                                          highlightColor: Color, highlightTextColor: Color, 
-                                          normalColor: Color) -> [TextPart] {
-        var result: [TextPart] = []
-        var lastEnd = 0
-        let nsString = parts as NSString
+    @ViewBuilder
+    private func createSimpleHighlightedText(text: String, searchText: String, normalColor: Color) -> some View {
+        let highlightColor = Color.yellow.opacity(0.6)
         
-        for match in matches {
-            guard match.range.location >= 0,
-                  match.range.location <= nsString.length,
-                  match.range.location + match.range.length <= nsString.length else { continue }
+        // 简单的首次匹配高亮，避免复杂算法
+        if let range = text.range(of: searchText, options: .caseInsensitive) {
+            let beforeText = String(text[..<range.lowerBound])
+            let matchText = String(text[range])
+            let afterText = String(text[range.upperBound...])
             
-            // Add text before match
-            if match.range.location > lastEnd {
-                let beforeRange = NSRange(location: lastEnd, length: match.range.location - lastEnd)
-                let beforeText = nsString.substring(with: beforeRange)
+            HStack(spacing: 0) {
                 if !beforeText.isEmpty {
-                    result.append(TextPart(id: UUID(), text: AnyView(Text(beforeText).foregroundColor(normalColor))))
+                    Text(beforeText)
+                        .foregroundColor(normalColor)
+                }
+                Text(matchText)
+                    .foregroundColor(.black)
+                    .background(highlightColor)
+                    .cornerRadius(2)
+                if !afterText.isEmpty {
+                    Text(afterText)
+                        .foregroundColor(normalColor)
                 }
             }
-            
-            // Add highlighted match
-            let matchText = nsString.substring(with: match.range)
-            result.append(TextPart(id: UUID(), text: AnyView(Text(matchText)
-                .foregroundColor(highlightTextColor)
-                .padding(.horizontal, 2)
-                .background(highlightColor)
-                .cornerRadius(2))))
-            
-            lastEnd = match.range.location + match.range.length
+            .lineLimit(1)
+            .font(.system(size: 12))
+        } else {
+            Text(text)
+                .foregroundColor(normalColor)
+                .lineLimit(1)
+                .font(.system(size: 12))
         }
-        
-        // Add remaining text
-        if lastEnd < nsString.length {
-            let remainingRange = NSRange(location: lastEnd, length: nsString.length - lastEnd)
-            let remainingText = nsString.substring(with: remainingRange)
-            if !remainingText.isEmpty {
-                result.append(TextPart(id: UUID(), text: AnyView(Text(remainingText).foregroundColor(normalColor))))
-            }
-        }
-        
-        return result
     }
 }
 
-struct TextPart: Identifiable {
-    let id: UUID
-    let text: AnyView
-}
 
 // MARK: - Main View
 
@@ -145,7 +120,6 @@ struct ClipboardListView: View {
     // Simplified state management - 使用统一的InputManager
     @StateObject private var inputManager: InputManager
     @State private var sortConfig = SortConfiguration()
-    @State private var searchDebounceTimer: Timer?
     
     init(clipboardManager: ClipboardManager,
          selectedItem: Binding<ClipboardItem?>,
@@ -201,14 +175,11 @@ struct ClipboardListView: View {
         .onDisappear {
             inputManager.cleanup()
         }
-        .onChange(of: filteredItems) { items in
+        .onChange(of: filteredItems) { _, items in
             inputManager.updateItems(items)
             selectedItem = inputManager.selectedItem
         }
-        .onChange(of: inputManager.searchText) { newText in
-            updateSearchWithDebounce(newText)
-        }
-        .onChange(of: inputManager.selectedItem) { item in
+        .onChange(of: inputManager.selectedItem) { _, item in
             selectedItem = item
         }
     }
@@ -220,7 +191,11 @@ struct ClipboardListView: View {
             text: $inputManager.searchText,
             isSidebarVisible: $isSidebarVisible,
             isWindowPinned: $isWindowPinned,
-            sortConfig: $sortConfig
+            sortConfig: $sortConfig,
+            shouldFocusOnAppear: true,
+            onTextChange: { newText in
+                inputManager.updateSearchText(newText)
+            }
         )
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -296,27 +271,14 @@ struct ClipboardListView: View {
     private func setupView() {
         inputManager.updateItems(filteredItems)
         inputManager.setup()
-        inputManager.isSearchFocused = true
         
         shortcutManager.updateListState(
-            focusedOnList: !inputManager.isSearchFocused,
+            focusedOnList: false,
             currentIndex: inputManager.currentIndex,
             totalCount: filteredItems.count
         )
     }
     
-    private func updateSearchWithDebounce(_ newText: String) {
-        searchDebounceTimer?.invalidate()
-        
-        if newText.isEmpty {
-            // Clear immediately for empty text
-            return
-        }
-        
-        searchDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false) { _ in
-            // Debounce logic already handled by inputManager
-        }
-    }
 }
 
 // MARK: - Supporting Views

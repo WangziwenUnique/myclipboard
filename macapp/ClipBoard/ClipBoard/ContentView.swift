@@ -199,7 +199,17 @@ struct ContentView: View {
             }
         }
         
+        // 监听剪贴板监控切换通知
+        let monitoringObserver = NotificationCenter.default.addObserver(
+            forName: .toggleClipboardMonitoring,
+            object: nil,
+            queue: .main
+        ) { [weak clipboardManager] _ in
+            clipboardManager?.toggleMonitoring()
+        }
+        
         observers.append(categoryObserver)
+        observers.append(monitoringObserver)
     }
     
     // MARK: - 观察者清理

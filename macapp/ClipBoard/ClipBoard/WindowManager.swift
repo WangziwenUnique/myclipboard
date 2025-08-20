@@ -11,10 +11,11 @@ final class WindowManager: NSObject {
     private var eventTap: CFMachPort?
     private var shortcutManager = KeyboardShortcutManager.shared
     private var globalHotKeyRef: EventHotKeyRef?
+    private var focusManager = FocusManager.shared
     
-    // 防抖机制相关
+    // 防抖机制相关 - 仅防止意外连击，不影响快速操作
     private var lastHotKeyTime: Date = Date.distantPast
-    private let hotKeyDebounceInterval: TimeInterval = 0.3
+    private let hotKeyDebounceInterval: TimeInterval = 0.05
     
     // 事件去重相关
     private var lastKeyEvent: (keyCode: UInt16, timestamp: Date) = (0, Date.distantPast)
@@ -165,6 +166,9 @@ final class WindowManager: NSObject {
         
         print("🚀 准备显示主窗口")
         
+        // 捕获当前焦点，以便稍后恢复
+        focusManager.capturePreviousFocus()
+        
         if let screen = NSScreen.main {
             let screenFrame = screen.visibleFrame
             let windowFrame = window.frame
@@ -184,6 +188,10 @@ final class WindowManager: NSObject {
         window.orderFront(nil)
         window.orderFrontRegardless()
         
+        // 强制窗口成为 key window，支持键盘输入焦点
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        
         enableEventTap()
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -201,11 +209,39 @@ final class WindowManager: NSObject {
     }
     
     func performDirectPaste() {
+        // 关闭窗口
         hideWindow()
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            self.performPasteOperation()
+        // 使用焦点管理器恢复之前的焦点，然后执行粘贴
+        focusManager.restorePreviousFocus()
+        
+        // 短暂延迟确保应用切换完成后再粘贴
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+            self.sendPasteEvent()
         }
+    }
+    
+    private func getTargetApplicationForPaste() -> NSRunningApplication? {
+        // 获取除当前应用外的前台应用
+        let workspace = NSWorkspace.shared
+        let allApps = workspace.runningApplications
+        
+        // 找到当前激活的应用（排除自己）
+        if let frontApp = workspace.frontmostApplication,
+           frontApp.bundleIdentifier != Bundle.main.bundleIdentifier {
+            return frontApp
+        }
+        
+        // 如果前台应用是自己，尝试找到最近活跃的其他应用
+        for app in allApps {
+            if app.isActive && 
+               app.bundleIdentifier != Bundle.main.bundleIdentifier &&
+               app.activationPolicy == .regular {
+                return app
+            }
+        }
+        
+        return nil
     }
     
     func toggleWindow() {
@@ -245,25 +281,20 @@ final class WindowManager: NSObject {
         let modifierStr = formatModifiers(modifiers)
         print("🎯 [CGEventTap] 检测到按键：keyCode=\(keyCode) (\(keyName)) modifiers=\(modifierStr)")
         
+        // 只处理剪贴板快捷键，其他一律放行给系统
         if isClipboardShortcut(keyCode, modifiers: modifiers) {
             print("   - ✅ 快捷键已处理，消费事件")
             return nil
         } else {
-            print("   - ✏️ 文本输入，注入到搜索框")
-            let handled = handleTextInput(keyCode, modifiers: modifiers)
-            if handled {
-                print("   - ✅ 文本输入已处理，消费事件")
-                return nil
-            }
+            print("   - ➡️ 放行给系统处理（文本输入或其他）")
+            return Unmanaged.passUnretained(event)
         }
-        
-        print("   - ❌ 按键未处理，继续传播")
-        return Unmanaged.passUnretained(event)
     }
     
     private func isClipboardShortcut(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
         return shortcutManager.handleKeyCode(keyCode, modifiers: modifiers)
     }
+    
     
     private func convertCGModifiersToEventModifiers(_ cgFlags: CGEventFlags) -> SwiftUI.EventModifiers {
         var modifiers: SwiftUI.EventModifiers = []
@@ -284,80 +315,7 @@ final class WindowManager: NSObject {
         return modifiers
     }
     
-    private func handleTextInput(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> Bool {
-        print("   ✏️ 处理文本输入 keyCode=\(keyCode)")
-        
-        switch keyCode {
-        case 51: // Backspace
-            print("   ⌫ 退格键 - 注入到搜索框")
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .textInputCommand, object: ["action": "backspace"])
-            }
-            return true
-            
-        case 49: // Space
-            print("   ␣ 空格键 - 注入到搜索框")
-            DispatchQueue.main.async {
-                NotificationCenter.default.post(name: .textInputCommand, object: ["action": "insert", "character": " "])
-            }
-            return true
-            
-        default:
-            if let character = keyCodeToCharacter(keyCode, modifiers: modifiers) {
-                print("   ⌨️ 输入字符: '\(character)' - 注入到搜索框")
-                DispatchQueue.main.async {
-                    NotificationCenter.default.post(name: .textInputCommand, object: ["action": "insert", "character": character])
-                }
-                return true
-            } else {
-                print("   ❌ 无法转换的按键: \(keyCode)")
-                return false
-            }
-        }
-    }
     
-    private func keyCodeToCharacter(_ keyCode: UInt16, modifiers: SwiftUI.EventModifiers) -> String? {
-        let basicKeyMap: [UInt16: String] = [
-            12: "q", 13: "w", 14: "e", 15: "r", 17: "t", 16: "y", 32: "u", 34: "i", 31: "o", 35: "p",
-            0: "a", 1: "s", 2: "d", 3: "f", 5: "g", 4: "h", 38: "j", 40: "k", 37: "l",
-            6: "z", 7: "x", 8: "c", 9: "v", 11: "b", 45: "n", 46: "m",
-            29: "0", 18: "1", 19: "2", 20: "3", 21: "4", 23: "5", 22: "6", 26: "7", 28: "8", 25: "9"
-        ]
-        
-        let symbolKeyMap: [UInt16: String] = [
-            27: "-", 24: "=", 33: "[", 30: "]", 42: "\\", 41: ";", 39: "'", 43: ",", 47: ".", 44: "/", 50: "`"
-        ]
-        
-        let shiftSymbolKeyMap: [UInt16: String] = [
-            29: ")", 18: "!", 19: "@", 20: "#", 21: "$", 23: "%", 22: "^", 26: "&", 28: "*", 25: "(",
-            27: "_", 24: "+", 33: "{", 30: "}", 42: "|", 41: ":", 39: "\"", 43: "<", 47: ">", 44: "?", 50: "~"
-        ]
-        
-        if modifiers.contains(.shift) {
-            if let shiftChar = shiftSymbolKeyMap[keyCode] {
-                return shiftChar
-            }
-            if let basicChar = basicKeyMap[keyCode] {
-                return basicChar.uppercased()
-            }
-        } else {
-            if let basicChar = basicKeyMap[keyCode] {
-                return basicChar
-            }
-            if let symbolChar = symbolKeyMap[keyCode] {
-                return symbolChar
-            }
-        }
-        
-        switch keyCode {
-        case 48: // Tab
-            return "\t"
-        case 36: // Return/Enter
-            return "\n"
-        default:
-            return nil
-        }
-    }
     
     private func registerGlobalHotKey() {
         let hotKeyId = EventHotKeyID(signature: OSType(0x53484356), id: 1)
@@ -396,7 +354,7 @@ final class WindowManager: NSObject {
     private func handleGlobalHotKey() {
         let currentTime = Date()
         if currentTime.timeIntervalSince(lastHotKeyTime) < hotKeyDebounceInterval {
-            print("🚫 全局热键防抖：忽略重复调用")
+            print("🚫 全局热键防抖：忽略意外连击 (\(Int(hotKeyDebounceInterval * 1000))ms)")
             return
         }
         lastHotKeyTime = currentTime
@@ -421,27 +379,25 @@ final class WindowManager: NSObject {
         }
     }
     
-    private func performPasteOperation() {
-        let script = """
-            tell application "System Events"
-                keystroke "v" using command down
-            end tell
-        """
-        
-        var error: NSDictionary?
-        if let appleScript = NSAppleScript(source: script) {
-            appleScript.executeAndReturnError(&error)
-            if let error = error {
-                print("AppleScript paste failed: \(error)")
-                fallbackPasteWithCGEvent()
+    private func performPasteOperation(to targetApp: NSRunningApplication?) {
+        // 如果有目标应用，先确保其激活
+        if let app = targetApp {
+            app.activate()
+            // 短暂延迟确保应用切换完成
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                self.sendPasteEvent()
             }
         } else {
-            fallbackPasteWithCGEvent()
+            // 没有目标应用，直接发送事件
+            sendPasteEvent()
         }
     }
     
-    private func fallbackPasteWithCGEvent() {
-        guard let source = CGEventSource(stateID: .hidSystemState) else { return }
+    private func sendPasteEvent() {
+        guard let source = CGEventSource(stateID: .hidSystemState) else {
+            print("❌ 无法创建CGEventSource")
+            return
+        }
         
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: true)
         let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 9, keyDown: false)
@@ -451,6 +407,8 @@ final class WindowManager: NSObject {
         
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
+        
+        print("✅ CGEvent粘贴命令已发送")
     }
     
     private func enableEventTap() {

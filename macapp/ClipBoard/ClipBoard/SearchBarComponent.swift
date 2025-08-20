@@ -6,6 +6,9 @@ struct SearchBarComponent: View {
     @Binding var isWindowPinned: Bool
     @Binding var sortConfig: SortConfiguration
     @State private var showShortcutsPopup = false
+    @FocusState private var isTextFieldFocused: Bool
+    var shouldFocusOnAppear: Bool = false
+    var onTextChange: ((String) -> Void)?
     
     var body: some View {
         HStack(spacing: 12) {
@@ -40,7 +43,14 @@ struct SearchBarComponent: View {
                 .font(.system(size: 16))
                 .frame(width: 16, height: 16)
             
-            SimpleTextField(text: $text, placeholder: "Type to search...")
+            TextField("Type to search...", text: $text)
+                .textFieldStyle(PlainTextFieldStyle())
+                .foregroundColor(.white)
+                .font(.system(size: 14))
+                .focused($isTextFieldFocused)
+                .onChange(of: text) { _, newValue in
+                    onTextChange?(newValue)
+                }
             
             if !text.isEmpty {
                 Button(action: { 
@@ -58,6 +68,19 @@ struct SearchBarComponent: View {
         .padding(.vertical, 6)
         .background(SidebarView.backgroundColor)
         .cornerRadius(12)
+        .onAppear {
+            if shouldFocusOnAppear {
+                // 立即尝试获得焦点
+                isTextFieldFocused = true
+                
+                // 延迟重试机制，处理窗口激活时序问题
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if !isTextFieldFocused {
+                        isTextFieldFocused = true
+                    }
+                }
+            }
+        }
     }
     
     private var windowPinButton: some View {

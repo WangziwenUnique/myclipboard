@@ -16,6 +16,10 @@ final class InputManager: ObservableObject {
     @Published var searchText: String = ""
     @Published var isSearchFocused: Bool = false
     
+    // 防抖机制
+    private var searchDebounceTimer: Timer?
+    private var pendingSearchText: String = ""
+    
     private var observers: [NSObjectProtocol] = []
     
     init(clipboardManager: ClipboardManager, 
@@ -29,6 +33,7 @@ final class InputManager: ObservableObject {
         let count = observers.count
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         observers.removeAll()
+        searchDebounceTimer?.invalidate()
         if count > 0 {
             print("🧹 InputManager deinit - 清理了 \(count) 个观察者")
         }
@@ -124,6 +129,29 @@ final class InputManager: ObservableObject {
     
     func cleanup() {
         cleanupObservers()
+        searchDebounceTimer?.invalidate()
+        searchDebounceTimer = nil
+    }
+    
+    // MARK: - Search Management
+    
+    func updateSearchText(_ newText: String) {
+        pendingSearchText = newText
+        
+        // 立即处理空文本
+        if newText.isEmpty {
+            searchDebounceTimer?.invalidate()
+            searchText = ""
+            return
+        }
+        
+        // 防抖处理非空文本
+        searchDebounceTimer?.invalidate()
+        searchDebounceTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.searchText = self?.pendingSearchText ?? ""
+            }
+        }
     }
     
     // MARK: - Private Methods
@@ -237,15 +265,6 @@ final class InputManager: ObservableObject {
             }
         }
         
-        let textInputObserver = NotificationCenter.default.addObserver(
-            forName: .textInputCommand,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            Task { @MainActor in
-                self?.handleTextInput(notification)
-            }
-        }
         
         let copyItemObserver = NotificationCenter.default.addObserver(
             forName: .copyCurrentItem,
@@ -258,7 +277,7 @@ final class InputManager: ObservableObject {
         }
         
         observers = [navigateUpObserver, navigateDownObserver, selectItemObserver, 
-                    numberSelectObserver, resetObserver, textInputObserver, copyItemObserver]
+                    numberSelectObserver, resetObserver, copyItemObserver]
     }
     
     private func cleanupObservers() {
@@ -272,23 +291,6 @@ final class InputManager: ObservableObject {
     
     // MARK: - Action Methods
     
-    private func handleTextInput(_ notification: Notification) {
-        guard let data = notification.object as? [String: Any],
-              let action = data["action"] as? String else { return }
-        
-        switch action {
-        case "backspace":
-            if !searchText.isEmpty {
-                searchText.removeLast()
-            }
-        case "insert":
-            if let character = data["character"] as? String {
-                searchText += character
-            }
-        default:
-            break
-        }
-    }
     
     private func selectCurrentItem() {
         guard let item = selectedItem else { return }

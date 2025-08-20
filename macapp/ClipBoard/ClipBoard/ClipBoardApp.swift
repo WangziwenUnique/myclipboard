@@ -19,6 +19,7 @@ extension Notification.Name {
     static let textInputCommand = Notification.Name("clipboard.textInputCommand")
     static let copyCurrentItem = Notification.Name("clipboard.copyCurrentItem")
     static let categoryChanged = Notification.Name("clipboard.categoryChanged")
+    static let toggleClipboardMonitoring = Notification.Name("clipboard.toggleMonitoring")
 }
 
 // 自定义窗口类，允许无边框窗口接收键盘输入
@@ -50,6 +51,9 @@ struct ClipBoardApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private let windowManager = WindowManager.shared
+    private var settingsWindowController: SettingsWindowController?
+    private var aboutWindowController: AboutWindowController?
+    private var contextMenu: NSMenu?
     
     
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -72,6 +76,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         // 设置快捷键处理器
         setupShortcutHandlers()
+        
+        // 监听剪贴板监控状态变化
+        setupStatusBarNotifications()
     }
     
     private func setupStatusBar() {
@@ -81,25 +88,96 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "ClipBoard")
             button.action = #selector(toggleWindow)
             button.target = self
+            
+            // 只响应左键点击
+            button.sendAction(on: [.leftMouseUp])
+            
+            // 添加右键事件监听
+            setupRightClickMonitoring()
         }
         
-        // 不设置菜单，只响应点击事件
-        // statusItem?.menu = nil (默认就是 nil)
+        // 创建菜单但不直接设置给状态栏项
+        setupStatusBarMenu()
     }
     
+    private func setupStatusBarMenu() {
+        let menu = NSMenu()
+        
+        // Open ClipBook
+        let openItem = NSMenuItem(title: "Open ClipBook", action: #selector(toggleWindow), keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Help 子菜单
+        let helpItem = NSMenuItem(title: "Help", action: nil, keyEquivalent: "")
+        let helpSubmenu = NSMenu()
+        let helpContentsItem = NSMenuItem(title: "ClipBook Help", action: #selector(showHelp), keyEquivalent: "")
+        helpContentsItem.target = self
+        helpSubmenu.addItem(helpContentsItem)
+        helpItem.submenu = helpSubmenu
+        menu.addItem(helpItem)
+        
+        // About ClipBook
+        let aboutItem = NSMenuItem(title: "About ClipBook", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
+        
+        // Check for Updates...
+        let updateItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
+        
+        // Settings... (⌘,)
+        let settingsItem = NSMenuItem(title: "Settings...", action: #selector(showSettings), keyEquivalent: "")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Pause ClipBook - 根据当前状态设置初始标题
+        let isMonitoring = UserDefaults.standard.object(forKey: "clipboardMonitoring") == nil ? true : UserDefaults.standard.bool(forKey: "clipboardMonitoring")
+        let pauseItem = NSMenuItem(title: isMonitoring ? "Pause ClipBook" : "Resume ClipBook", action: #selector(toggleClipboardMonitoring), keyEquivalent: "")
+        pauseItem.target = self
+        pauseItem.tag = 100 // 用于动态更新标题
+        menu.addItem(pauseItem)
+        
+        // Quit
+        let quitItem = NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "")
+        quitItem.target = self
+        menu.addItem(quitItem)
+        
+        // 保存菜单引用，但不直接设置给状态栏项
+        contextMenu = menu
+    }
     
+    private func setupRightClickMonitoring() {
+        guard let button = statusItem?.button else { return }
+        
+        // 监听右键点击事件
+        NSEvent.addLocalMonitorForEvents(matching: [.rightMouseUp]) { [weak self] event in
+            guard let self = self else { return event }
+            
+            // 检查点击是否在状态栏按钮区域内
+            let windowPoint = event.locationInWindow
+            let buttonFrame = button.frame
+            
+            if button.window == event.window && buttonFrame.contains(windowPoint) {
+                self.showContextMenu()
+                return nil // 消费这个事件
+            }
+            
+            return event
+        }
+    }
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    private func showContextMenu() {
+        guard let menu = contextMenu, let button = statusItem?.button else { return }
+        
+        // 在状态栏按钮位置显示菜单
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.frame.height), in: button)
+    }
     
     
     @objc private func toggleWindow() {
@@ -144,6 +222,69 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             windowManager.cleanup()
         }
         NSApp.terminate(nil)
+    }
+    
+    // MARK: - 菜单项 Actions
+    
+    @objc private func showSettings() {
+        if settingsWindowController == nil {
+            settingsWindowController = SettingsWindowController()
+        }
+        settingsWindowController?.showWindow(self)
+    }
+    
+    @objc private func showAbout() {
+        if aboutWindowController == nil {
+            aboutWindowController = AboutWindowController()
+        }
+        aboutWindowController?.showWindow(self)
+    }
+    
+    @objc private func showHelp() {
+        // 打开帮助网页或显示帮助信息
+        if let url = URL(string: "https://github.com/your-repo/clipbook/help") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+    
+    @objc private func checkForUpdates() {
+        // 这里可以实现更新检查逻辑
+        let alert = NSAlert()
+        alert.messageText = "Check for Updates"
+        alert.informativeText = "Update checking feature will be implemented in a future version."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+    
+    @objc private func toggleClipboardMonitoring() {
+        // 获取全局的 ClipboardManager 实例
+        // 注意：这里需要一个方式来访问全局的 ClipboardManager 实例
+        // 为了简化，我们先使用通知机制
+        NotificationCenter.default.post(name: .toggleClipboardMonitoring, object: nil)
+    }
+    
+    // MARK: - 状态栏通知监听
+    
+    private func setupStatusBarNotifications() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(updateMenuItemTitles),
+            name: .toggleClipboardMonitoring,
+            object: nil
+        )
+    }
+    
+    @objc private func updateMenuItemTitles() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            // 获取当前监控状态
+            let isMonitoring = UserDefaults.standard.object(forKey: "clipboardMonitoring") == nil ? true : UserDefaults.standard.bool(forKey: "clipboardMonitoring")
+            
+            // 更新菜单项标题
+            if let menu = self?.contextMenu,
+               let pauseItem = menu.item(withTag: 100) {
+                pauseItem.title = isMonitoring ? "Pause ClipBook" : "Resume ClipBoard"
+            }
+        }
     }
     
     func applicationWillTerminate(_ notification: Notification) {
