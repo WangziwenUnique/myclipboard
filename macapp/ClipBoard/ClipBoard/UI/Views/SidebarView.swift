@@ -224,6 +224,10 @@ struct CategoryIconRow: View {
     @State private var isHovered: Bool = false
     @State private var showTooltip: Bool = false
     
+    // 固定按钮和图标尺寸
+    private let buttonSize: CGFloat = 26
+    private let iconSize: CGFloat = 14
+    
     var body: some View {
         GeometryReader { geometry in
             ZStack {
@@ -231,9 +235,9 @@ struct CategoryIconRow: View {
                     VStack(spacing: 2) {
                         Image(systemName: category.icon)
                             .foregroundColor(isSelected ? .blue : (isHovered ? .white : .gray))
-                            .frame(width: 18, height: 18)
+                            .frame(width: iconSize, height: iconSize)
                     }
-                    .frame(width: 30, height: 30)
+                    .frame(width: buttonSize, height: buttonSize)
                     .background(
                         isSelected ? SidebarView.selectedBackgroundColor :
                         (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear)
@@ -271,7 +275,7 @@ struct CategoryIconRow: View {
                 }
             }
         }
-        .frame(width: 30, height: 30)
+        .frame(width: buttonSize, height: buttonSize)
     }
 }
 
@@ -283,6 +287,10 @@ struct AppIconRow: View {
     let action: () -> Void
     @State private var isHovered: Bool = false
     @State private var showTooltip: Bool = false
+    
+    // 固定按钮和图标尺寸
+    private let buttonSize: CGFloat = 22
+    private let iconSize: CGFloat = 14
     
     private var imageName: String {
         // 简单映射，后续可替换为 Assets 自定义图标
@@ -306,8 +314,8 @@ struct AppIconRow: View {
                         Image(nsImage: appIcon)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
-                            .frame(width: 18, height: 18)
-                            .frame(width: 26, height: 26)
+                            .frame(width: iconSize, height: iconSize)
+                            .frame(width: buttonSize, height: buttonSize)
                             .background(
                                 isSelected ? SidebarView.selectedBackgroundColor :
                                 (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear)
@@ -317,8 +325,8 @@ struct AppIconRow: View {
                         // 备用系统图标
                         Image(systemName: imageName)
                             .foregroundColor(isSelected ? .blue : (isHovered ? .white : .gray))
-                            .frame(width: 18, height: 18)
-                            .frame(width: 26, height: 26)
+                            .frame(width: iconSize, height: iconSize)
+                            .frame(width: buttonSize, height: buttonSize)
                             .background(
                                 isSelected ? SidebarView.selectedBackgroundColor :
                                 (isHovered ? Color(red: 0.25, green: 0.25, blue: 0.25) : Color.clear)
@@ -357,7 +365,7 @@ struct AppIconRow: View {
                 }
             }
         }
-        .frame(width: 26, height: 26)
+        .frame(width: buttonSize, height: buttonSize)
     }
 }
 

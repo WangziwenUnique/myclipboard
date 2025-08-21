@@ -101,7 +101,6 @@ final class WindowManager: NSObject {
         window?.acceptsMouseMovedEvents = true
         
         window?.minSize = NSSize(width: 720, height: 480)
-        window?.maxSize = NSSize(width: 1600, height: 1200)
         
         window?.orderOut(nil)
     }

@@ -52,9 +52,9 @@ struct ContentView: View {
                             onTooltip: { tooltipData in
                                 globalTooltip = tooltipData
                             },
-                            sidebarWidth: max(50, geometry.size.width * 0.06)
+                            sidebarWidth: 50.0
                         )
-                        .frame(width: max(50, geometry.size.width * 0.06), height: geometry.size.height)
+                        .frame(width: 50, height: geometry.size.height)
                         .background(Color.clear) // 确保背景透明以便弹窗显示
                         .transition(.move(edge: .leading))
                     
@@ -65,7 +65,7 @@ struct ContentView: View {
                     }
                 
                     // 中间列表视图 - 动态调整宽度
-                    let sidebarActualWidth = isSidebarVisible ? max(50, geometry.size.width * 0.06) : 0
+                    let sidebarActualWidth: CGFloat = isSidebarVisible ? 50.0 : 0
                     let availableWidth = geometry.size.width - sidebarActualWidth - (isSidebarVisible ? 1 : 0)
                     let listWidth = availableWidth / 2 - 0.25
                     
