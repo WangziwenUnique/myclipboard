@@ -190,7 +190,7 @@ final class InputManager: ObservableObject {
             self?.isSearchFocused = true
         }
         
-        shortcutManager.registerHandler(for: .closeWindow) { [weak self] in
+        shortcutManager.registerHandler(for: .closeWindow) {
             WindowManager.shared.hideWindow()
         }
         

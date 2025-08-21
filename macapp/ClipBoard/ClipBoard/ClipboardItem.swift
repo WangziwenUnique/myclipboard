@@ -104,7 +104,12 @@ struct ClipboardItem: Identifiable, Hashable, Codable {
         let processedContent: String
         switch type {
         case .text:
-            processedContent = content
+            // Remove leading whitespace to avoid wasting visual space in list display
+            var trimmedContent = content
+            while trimmedContent.hasPrefix(" ") || trimmedContent.hasPrefix("\t") {
+                trimmedContent = String(trimmedContent.dropFirst())
+            }
+            processedContent = trimmedContent
         case .image:
             if let dimensions = imageDimensions, let size = imageSize {
                 let sizeStr = formatBytes(size)

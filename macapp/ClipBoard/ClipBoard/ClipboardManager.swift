@@ -9,9 +9,12 @@ class ClipboardManager: NSObject, ObservableObject {
     @Published var isMonitoring: Bool = true
     
     private var lastClipboardContent: String = ""
-    private var lastClipboardChangeCount: Int = 0
     private let dataManager = ClipboardDataManager()
     private let maxItems = 1000  // 增加存储上限
+    
+    // Timer轮询监控
+    private var clipboardTimer: Timer?
+    private var lastChangeCount: Int = 0
     
     // 性能优化：批量保存和去重
     private var pendingSave = false
@@ -28,42 +31,41 @@ class ClipboardManager: NSObject, ObservableObject {
         isMonitoring = UserDefaults.standard.object(forKey: "clipboardMonitoring") == nil ? true : UserDefaults.standard.bool(forKey: "clipboardMonitoring")
         
         loadPersistedData()
-        startMonitoring()
+        startTimerMonitoring()
     }
     
     deinit {
-        stopMonitoring()
+        stopTimerMonitoring()
         saveTimer?.invalidate()
     }
     
-    private func startMonitoring() {
+    private func startTimerMonitoring() {
         // 初始化剪贴板状态
-        lastClipboardChangeCount = NSPasteboard.general.changeCount
+        lastChangeCount = NSPasteboard.general.changeCount
         
-        // 使用KVO监听剪贴板变化，替代低效的轮询
-        NSPasteboard.general.addObserver(self, 
-                                       forKeyPath: "changeCount", 
-                                       options: [.new], 
-                                       context: nil)
+        // 使用Timer轮询监控剪贴板变化（业界标准做法）
+        clipboardTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.checkClipboardChanges()
+            }
+        }
         
-        print("✅ 剪贴板监控已启动 (KVO)")
+        print("✅ 剪贴板监控已启动 (Timer轮询)")
     }
     
-    private func stopMonitoring() {
-        NSPasteboard.general.removeObserver(self, forKeyPath: "changeCount")
+    private func stopTimerMonitoring() {
+        clipboardTimer?.invalidate()
+        clipboardTimer = nil
         print("🛑 剪贴板监控已停止")
     }
     
-    override func observeValue(forKeyPath keyPath: String?, 
-                              of object: Any?, 
-                              change: [NSKeyValueChangeKey : Any]?, 
-                              context: UnsafeMutableRawPointer?) {
-        if keyPath == "changeCount" {
-            DispatchQueue.main.async {
-                self.checkClipboard()
-            }
-        } else {
-            super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
+    private func checkClipboardChanges() {
+        let currentChangeCount = NSPasteboard.general.changeCount
+        
+        // 只有在changeCount真正变化时才处理
+        if currentChangeCount != lastChangeCount {
+            lastChangeCount = currentChangeCount
+            checkClipboard()
         }
     }
     
@@ -72,11 +74,6 @@ class ClipboardManager: NSObject, ObservableObject {
         guard isMonitoring else { return }
         
         let pasteboard = NSPasteboard.general
-        let currentChangeCount = pasteboard.changeCount
-        
-        // 只有在剪贴板真正变化时才处理
-        guard currentChangeCount != lastClipboardChangeCount else { return }
-        lastClipboardChangeCount = currentChangeCount
         
         // 检查多种数据类型
         if let string = pasteboard.string(forType: .string), !string.isEmpty {
