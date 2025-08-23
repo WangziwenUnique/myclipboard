@@ -4,16 +4,38 @@ import SQLite3
 class SQLiteClipboardRepository: ClipboardRepository {
     private let dbManager = DatabaseManager.shared
     
-    func save(_ item: ClipboardItem) async throws {
-        let sql = """
-        INSERT OR REPLACE INTO clipboard_items (
-            id, content, type, timestamp, source_app, source_app_bundle_id,
-            is_favorite, html_content, copy_count, first_copy_time,
-            last_copy_time, image_data, image_dimensions, image_size, file_path
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
+    func save(_ item: ClipboardItem) async throws -> ClipboardItem {
+        // 简化的数据验证
+        guard !item.content.isEmpty else {
+            throw DatabaseError.bindingFailed("Invalid content: empty")
+        }
         
-        try await dbManager.execute { db in
+        guard ClipboardItemType.allCases.contains(item.type) else {
+            throw DatabaseError.bindingFailed("Invalid type: \(item.type.rawValue)")
+        }
+        
+        let sql: String
+        if item.id == 0 {
+            // 新项目，让数据库自动生成ID
+            sql = """
+            INSERT INTO clipboard_items (
+                content, type, timestamp, source_app, source_app_bundle_id,
+                is_favorite, html_content, copy_count, first_copy_time,
+                last_copy_time, image_data, image_dimensions, image_size, file_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+        } else {
+            // 更新现有项目
+            sql = """
+            INSERT OR REPLACE INTO clipboard_items (
+                id, content, type, timestamp, source_app, source_app_bundle_id,
+                is_favorite, html_content, copy_count, first_copy_time,
+                last_copy_time, image_data, image_dimensions, image_size, file_path
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """
+        }
+        
+        return try await dbManager.execute { db in
             var statement: OpaquePointer?
             
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -22,67 +44,98 @@ class SQLiteClipboardRepository: ClipboardRepository {
             
             defer { sqlite3_finalize(statement) }
             
-            // 绑定参数
-            sqlite3_bind_text(statement, 1, item.id.uuidString, -1, nil)
-            sqlite3_bind_text(statement, 2, item.content, -1, nil)
-            sqlite3_bind_text(statement, 3, item.type.rawValue, -1, nil)
-            sqlite3_bind_int64(statement, 4, Int64(item.timestamp.timeIntervalSince1970 * 1000))
+            // 根据是否为新项目绑定不同参数
+            var paramIndex: Int32 = 1
             
-            if let sourceApp = item.sourceApp.isEmpty ? nil : item.sourceApp {
-                sqlite3_bind_text(statement, 5, sourceApp, -1, nil)
-            } else {
-                sqlite3_bind_null(statement, 5)
+            // 如果是更新现有项目，先绑定ID
+            if item.id != 0 {
+                sqlite3_bind_int64(statement, paramIndex, item.id)
+                paramIndex += 1
             }
             
-            if let bundleID = item.sourceAppBundleID {
-                sqlite3_bind_text(statement, 6, bundleID, -1, nil)
+            // 绑定其他参数
+            sqlite3_bind_text(statement, paramIndex, item.content, -1, nil)
+            sqlite3_bind_text(statement, paramIndex + 1, item.type.rawValue, -1, nil)
+            sqlite3_bind_int64(statement, paramIndex + 2, Int64(item.timestamp.timeIntervalSince1970 * 1000))
+            
+            sqlite3_bind_text(statement, paramIndex + 3, item.sourceApp, -1, nil)
+            
+            if let bundleID = item.sourceAppBundleID, !bundleID.isEmpty {
+                sqlite3_bind_text(statement, paramIndex + 4, bundleID, -1, nil)
             } else {
-                sqlite3_bind_null(statement, 6)
+                sqlite3_bind_null(statement, paramIndex + 4)
             }
             
-            sqlite3_bind_int(statement, 7, item.isFavorite ? 1 : 0)
+            sqlite3_bind_int(statement, paramIndex + 5, item.isFavorite ? 1 : 0)
             
-            if let htmlContent = item.htmlContent {
-                sqlite3_bind_text(statement, 8, htmlContent, -1, nil)
+            if let htmlContent = item.htmlContent, !htmlContent.isEmpty {
+                sqlite3_bind_text(statement, paramIndex + 6, htmlContent, -1, nil)
             } else {
-                sqlite3_bind_null(statement, 8)
+                sqlite3_bind_null(statement, paramIndex + 6)
             }
             
-            sqlite3_bind_int(statement, 9, Int32(item.copyCount))
-            sqlite3_bind_int64(statement, 10, Int64(item.firstCopyTime.timeIntervalSince1970 * 1000))
-            sqlite3_bind_int64(statement, 11, Int64(item.lastCopyTime.timeIntervalSince1970 * 1000))
+            sqlite3_bind_int(statement, paramIndex + 7, Int32(item.copyCount))
+            sqlite3_bind_int64(statement, paramIndex + 8, Int64(item.firstCopyTime.timeIntervalSince1970 * 1000))
+            sqlite3_bind_int64(statement, paramIndex + 9, Int64(item.lastCopyTime.timeIntervalSince1970 * 1000))
             
             if let imageData = item.imageData {
-                sqlite3_bind_blob(statement, 12, imageData.withUnsafeBytes { $0.baseAddress }, Int32(imageData.count), nil)
+                sqlite3_bind_blob(statement, paramIndex + 10, imageData.withUnsafeBytes { $0.baseAddress }, Int32(imageData.count), nil)
             } else {
-                sqlite3_bind_null(statement, 12)
+                sqlite3_bind_null(statement, paramIndex + 10)
             }
             
-            if let dimensions = item.imageDimensions {
-                sqlite3_bind_text(statement, 13, dimensions, -1, nil)
+            if let dimensions = item.imageDimensions, !dimensions.isEmpty {
+                sqlite3_bind_text(statement, paramIndex + 11, dimensions, -1, nil)
             } else {
-                sqlite3_bind_null(statement, 13)
+                sqlite3_bind_null(statement, paramIndex + 11)
             }
             
-            if let imageSize = item.imageSize {
-                sqlite3_bind_int64(statement, 14, imageSize)
+            if let imageSize = item.imageSize, imageSize > 0 {
+                sqlite3_bind_int64(statement, paramIndex + 12, imageSize)
             } else {
-                sqlite3_bind_null(statement, 14)
+                sqlite3_bind_null(statement, paramIndex + 12)
             }
             
-            if let filePath = item.filePath {
-                sqlite3_bind_text(statement, 15, filePath, -1, nil)
+            if let filePath = item.filePath, !filePath.isEmpty {
+                sqlite3_bind_text(statement, paramIndex + 13, filePath, -1, nil)
             } else {
-                sqlite3_bind_null(statement, 15)
+                sqlite3_bind_null(statement, paramIndex + 13)
             }
             
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.executionFailed(String(cString: sqlite3_errmsg(db)))
             }
+            
+            // 获取生成的ID或使用原有ID
+            let finalID: Int64
+            if item.id == 0 {
+                finalID = sqlite3_last_insert_rowid(db)
+            } else {
+                finalID = item.id
+            }
+            
+            // 返回带有正确ID的ClipboardItem
+            return ClipboardItem(
+                id: finalID,
+                content: item.content,
+                type: item.type,
+                timestamp: item.timestamp,
+                sourceApp: item.sourceApp,
+                isFavorite: item.isFavorite,
+                htmlContent: item.htmlContent,
+                copyCount: item.copyCount,
+                firstCopyTime: item.firstCopyTime,
+                lastCopyTime: item.lastCopyTime,
+                sourceAppBundleID: item.sourceAppBundleID,
+                imageData: item.imageData,
+                imageDimensions: item.imageDimensions,
+                imageSize: item.imageSize,
+                filePath: item.filePath
+            )
         }
     }
     
-    func delete(_ id: UUID) async throws {
+    func delete(_ id: Int64) async throws {
         let sql = "DELETE FROM clipboard_items WHERE id = ?"
         
         try await dbManager.execute { db in
@@ -94,7 +147,7 @@ class SQLiteClipboardRepository: ClipboardRepository {
             
             defer { sqlite3_finalize(statement) }
             
-            sqlite3_bind_text(statement, 1, id.uuidString, -1, nil)
+            sqlite3_bind_int64(statement, 1, id)
             
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.executionFailed(String(cString: sqlite3_errmsg(db)))
@@ -104,6 +157,12 @@ class SQLiteClipboardRepository: ClipboardRepository {
     
     func loadAll() async throws -> [ClipboardItem] {
         let sql = "SELECT * FROM clipboard_items ORDER BY timestamp DESC LIMIT 1000"
+        return try await queryItems(sql: sql)
+    }
+    
+    func loadPage(page: Int, limit: Int) async throws -> [ClipboardItem] {
+        let offset = page * limit
+        let sql = "SELECT * FROM clipboard_items ORDER BY timestamp DESC LIMIT \(limit) OFFSET \(offset)"
         return try await queryItems(sql: sql)
     }
     
@@ -193,7 +252,7 @@ class SQLiteClipboardRepository: ClipboardRepository {
         return isReversed ? sortedItems.reversed() : sortedItems
     }
     
-    func incrementCopyCount(_ id: UUID) async throws {
+    func incrementCopyCount(_ id: Int64) async throws {
         let sql = """
         UPDATE clipboard_items 
         SET copy_count = copy_count + 1, last_copy_time = ? 
@@ -210,7 +269,7 @@ class SQLiteClipboardRepository: ClipboardRepository {
             defer { sqlite3_finalize(statement) }
             
             sqlite3_bind_int64(statement, 1, Int64(Date().timeIntervalSince1970 * 1000))
-            sqlite3_bind_text(statement, 2, id.uuidString, -1, nil)
+            sqlite3_bind_int64(statement, 2, id)
             
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.executionFailed(String(cString: sqlite3_errmsg(db)))
@@ -218,7 +277,7 @@ class SQLiteClipboardRepository: ClipboardRepository {
         }
     }
     
-    func updateFavoriteStatus(_ id: UUID, isFavorite: Bool) async throws {
+    func updateFavoriteStatus(_ id: Int64, isFavorite: Bool) async throws {
         let sql = "UPDATE clipboard_items SET is_favorite = ? WHERE id = ?"
         
         try await dbManager.execute { db in
@@ -231,7 +290,7 @@ class SQLiteClipboardRepository: ClipboardRepository {
             defer { sqlite3_finalize(statement) }
             
             sqlite3_bind_int(statement, 1, isFavorite ? 1 : 0)
-            sqlite3_bind_text(statement, 2, id.uuidString, -1, nil)
+            sqlite3_bind_int64(statement, 2, id)
             
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw DatabaseError.executionFailed(String(cString: sqlite3_errmsg(db)))
@@ -314,14 +373,23 @@ class SQLiteClipboardRepository: ClipboardRepository {
             throw DatabaseError.executionFailed("Statement is nil")
         }
         
-        // 获取所有列的值
-        let idString = String(cString: sqlite3_column_text(statement, 0))
-        let content = String(cString: sqlite3_column_text(statement, 1))
-        let typeString = String(cString: sqlite3_column_text(statement, 2))
+        // 获取ID（现在是整数）
+        let id = sqlite3_column_int64(statement, 0)
+        
+        guard let contentPtr = sqlite3_column_text(statement, 1) else {
+            throw DatabaseError.executionFailed("Content column is null")
+        }
+        let content = String(cString: contentPtr)
+        
+        guard let typePtr = sqlite3_column_text(statement, 2) else {
+            throw DatabaseError.executionFailed("Type column is null")
+        }
+        let typeString = String(cString: typePtr)
+        
         let timestamp = sqlite3_column_int64(statement, 3)
         
         let sourceApp = sqlite3_column_type(statement, 4) == SQLITE_NULL ? 
-            "Unknown" : String(cString: sqlite3_column_text(statement, 4))
+            "" : String(cString: sqlite3_column_text(statement, 4))
             
         let sourceAppBundleID = sqlite3_column_type(statement, 5) == SQLITE_NULL ? 
             nil : String(cString: sqlite3_column_text(statement, 5))
@@ -354,9 +422,8 @@ class SQLiteClipboardRepository: ClipboardRepository {
             nil : String(cString: sqlite3_column_text(statement, 14))
         
         // 创建ClipboardItem
-        guard let id = UUID(uuidString: idString),
-              let type = ClipboardItemType(rawValue: typeString) else {
-            throw DatabaseError.executionFailed("Invalid data format")
+        guard let type = ClipboardItemType(rawValue: typeString) else {
+            throw DatabaseError.executionFailed("Invalid type format: '\(typeString)'. Valid types: \(ClipboardItemType.allCases.map { $0.rawValue })")
         }
         
         // 使用数据库构造函数创建ClipboardItem

@@ -242,6 +242,12 @@ struct ClipboardListView: View {
                     .contextMenu {
                         itemContextMenu(for: item)
                     }
+                    .onAppear {
+                        // 检测是否需要加载更多数据
+                        if item == filteredItems.last {
+                            clipboardManager.loadMoreIfNeeded()
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 8)

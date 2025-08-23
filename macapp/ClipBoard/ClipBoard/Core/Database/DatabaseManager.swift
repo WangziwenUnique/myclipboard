@@ -17,8 +17,20 @@ class DatabaseManager {
     }
     
     private var databaseURL: URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return documentsURL.appendingPathComponent("clipboard.db")
+        let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let bundleID = Bundle.main.bundleIdentifier ?? "com.clipboard.app"
+        let appDirectory = appSupportURL.appendingPathComponent(bundleID)
+        
+        // 确保目录存在
+        do {
+            try FileManager.default.createDirectory(at: appDirectory, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            print("❌ 无法创建应用数据目录: \(error)")
+        }
+        
+        let dbURL = appDirectory.appendingPathComponent("clipboard.db")
+        print("📁 数据库路径: \(dbURL.path)")
+        return dbURL
     }
     
     private func openDatabase() {
@@ -44,7 +56,7 @@ class DatabaseManager {
     private func createTables() {
         let createTableSQL = """
         CREATE TABLE IF NOT EXISTS clipboard_items (
-            id TEXT PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             content TEXT NOT NULL,
             type TEXT NOT NULL,
             timestamp INTEGER NOT NULL,

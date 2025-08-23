@@ -12,6 +12,12 @@ class ClipboardManager: NSObject, ObservableObject {
     private let repository: ClipboardRepository = SQLiteClipboardRepository()
     private let maxItems = 1000  // 增加存储上限
     
+    // 分页参数
+    private let pageSize = 100
+    private var currentPage = 0
+    private var isLoading = false
+    private var hasMoreData = true
+    
     // Timer轮询监控
     private var clipboardTimer: Timer?
     private var lastChangeCount: Int = 0
@@ -493,25 +499,54 @@ class ClipboardManager: NSObject, ObservableObject {
     
     private func loadPersistedData() {
         Task {
-            do {
-                let items = try await repository.loadAll()
-                await MainActor.run {
+            await loadPage(0)
+        }
+    }
+    
+    private func loadPage(_ page: Int) async {
+        guard !isLoading else { return }
+        isLoading = true
+        
+        do {
+            let items = try await repository.loadPage(page: page, limit: pageSize)
+            await MainActor.run {
+                if page == 0 {
                     self.clipboardItems = items
                     self.selectedItem = items.first
+                } else {
+                    self.clipboardItems.append(contentsOf: items)
                 }
-                print("已加载 \(items.count) 个剪贴板项目")
-            } catch {
-                print("加载数据失败: \(error)")
-                // 如果加载失败，可以选择加载示例数据用于测试
-                // loadSampleData()
+                self.hasMoreData = items.count == self.pageSize
+                self.currentPage = page
             }
+            print("已加载第\(page)页，共 \(items.count) 个剪贴板项目")
+        } catch {
+            print("加载第\(page)页失败: \(error)")
+        }
+        
+        isLoading = false
+    }
+    
+    func loadMoreIfNeeded() {
+        guard !isLoading && hasMoreData else { return }
+        let nextPage = currentPage + 1
+        Task {
+            await loadPage(nextPage)
         }
     }
     
     private func saveItem(_ item: ClipboardItem) {
         Task {
             do {
-                try await repository.save(item)
+                let savedItem = try await repository.save(item)
+                // 如果是新item（ID为0），需要更新内存中的item为带有正确ID的版本
+                if item.id == 0 {
+                    await MainActor.run {
+                        if let index = self.clipboardItems.firstIndex(where: { $0.id == 0 }) {
+                            self.clipboardItems[index] = savedItem
+                        }
+                    }
+                }
             } catch {
                 print("保存项目失败: \(error)")
             }

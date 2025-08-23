@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 struct ClipboardItem: Identifiable, Hashable, Codable {
-    let id: UUID
+    let id: Int64
     let content: String
     let type: ClipboardItemType
     let timestamp: Date
@@ -77,7 +77,7 @@ struct ClipboardItem: Identifiable, Hashable, Codable {
     }
     
     init(content: String, type: ClipboardItemType = .text, sourceApp: String = "Unknown", htmlContent: String? = nil, isFavorite: Bool = false, imageData: Data? = nil, imageDimensions: String? = nil, imageSize: Int64? = nil, filePath: String? = nil, sourceAppBundleID: String? = nil) {
-        self.id = UUID()
+        self.id = 0  // 将由数据库自动生成
         self.content = content
         self.type = type
         let now = Date()
@@ -96,7 +96,7 @@ struct ClipboardItem: Identifiable, Hashable, Codable {
     }
     
     // 从数据库创建ClipboardItem的构造函数
-    init(id: UUID, content: String, type: ClipboardItemType, timestamp: Date, sourceApp: String, isFavorite: Bool, htmlContent: String?, copyCount: Int, firstCopyTime: Date, lastCopyTime: Date, sourceAppBundleID: String?, imageData: Data?, imageDimensions: String?, imageSize: Int64?, filePath: String?) {
+    init(id: Int64, content: String, type: ClipboardItemType, timestamp: Date, sourceApp: String, isFavorite: Bool, htmlContent: String?, copyCount: Int, firstCopyTime: Date, lastCopyTime: Date, sourceAppBundleID: String?, imageData: Data?, imageDimensions: String?, imageSize: Int64?, filePath: String?) {
         self.id = id
         self.content = content
         self.type = type
