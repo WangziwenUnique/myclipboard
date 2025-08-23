@@ -9,16 +9,14 @@ class ClipboardManager: NSObject, ObservableObject {
     @Published var isMonitoring: Bool = true
     
     private var lastClipboardContent: String = ""
-    private let dataManager = ClipboardDataManager()
+    private let repository: ClipboardRepository = SQLiteClipboardRepository()
     private let maxItems = 1000  // 增加存储上限
     
     // Timer轮询监控
     private var clipboardTimer: Timer?
     private var lastChangeCount: Int = 0
     
-    // 性能优化：批量保存和去重
-    private var pendingSave = false
-    private var saveTimer: Timer?
+    // SQLite优化：单项保存（无需批量操作）
     
     // 数据存储配置
     private let maxContentSize = 1024 * 1024  // 1MB 最大内容大小
@@ -36,7 +34,6 @@ class ClipboardManager: NSObject, ObservableObject {
     
     deinit {
         stopTimerMonitoring()
-        saveTimer?.invalidate()
     }
     
     private func startTimerMonitoring() {
@@ -152,10 +149,10 @@ class ClipboardManager: NSObject, ObservableObject {
                 self.clipboardItems.remove(at: existingIndex)
                 self.clipboardItems.insert(existingItem, at: 0)
                 
-                // 保存到本地
-                self.saveDataAsync()
+                // 保存到数据库
+                self.saveItem(existingItem)
             } else {
-                // 新项目，添加到列表
+                // 新项目，添加到列表和数据库
                 self.clipboardItems.insert(newItem, at: 0)
                 
                 // 限制数量
@@ -163,8 +160,8 @@ class ClipboardManager: NSObject, ObservableObject {
                     self.clipboardItems = Array(self.clipboardItems.prefix(self.maxItems))
                 }
                 
-                // 保存到本地
-                self.saveDataAsync()
+                // 保存到数据库
+                self.saveItem(newItem)
             }
         }
     }
@@ -198,10 +195,10 @@ class ClipboardManager: NSObject, ObservableObject {
                 self.clipboardItems.remove(at: existingIndex)
                 self.clipboardItems.insert(existingItem, at: 0)
                 
-                // 保存到本地
-                self.saveDataAsync()
+                // 保存到数据库
+                self.saveItem(existingItem)
             } else {
-                // 新项目，添加到列表
+                // 新项目，添加到列表和数据库
                 self.clipboardItems.insert(newItem, at: 0)
                 
                 // 限制数量
@@ -209,8 +206,8 @@ class ClipboardManager: NSObject, ObservableObject {
                     self.clipboardItems = Array(self.clipboardItems.prefix(self.maxItems))
                 }
                 
-                // 保存到本地
-                self.saveDataAsync()
+                // 保存到数据库
+                self.saveItem(newItem)
             }
         }
     }
@@ -425,7 +422,7 @@ class ClipboardManager: NSObject, ObservableObject {
             var updatedItem = item
             updatedItem.toggleFavorite()
             clipboardItems[index] = updatedItem
-            saveDataAsync()
+            saveItem(updatedItem)
         }
     }
     
@@ -434,13 +431,20 @@ class ClipboardManager: NSObject, ObservableObject {
         if selectedItem?.id == item.id {
             selectedItem = clipboardItems.first
         }
-        saveDataAsync()
+        Task {
+            do {
+                try await repository.delete(item.id)
+            } catch {
+                print("删除项目失败: \(error)")
+            }
+        }
     }
     
     func searchItems(query: String) -> [ClipboardItem] {
         if query.isEmpty {
             return clipboardItems
         }
+        // 暂时保持内存搜索，可以后续优化为数据库搜索
         return clipboardItems.filter { item in
             item.content.localizedCaseInsensitiveContains(query) ||
             item.sourceApp.localizedCaseInsensitiveContains(query)
@@ -448,6 +452,7 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     func getItemsByCategory(_ category: ClipboardCategory) -> [ClipboardItem] {
+        // 暂时保持内存过滤，因为UI层仍在使用同步方法
         switch category {
         case .history:
             return clipboardItems
@@ -487,56 +492,53 @@ class ClipboardManager: NSObject, ObservableObject {
     // MARK: - Data Persistence
     
     private func loadPersistedData() {
-        do {
-            let items = try dataManager.loadItems()
-            DispatchQueue.main.async {
-                self.clipboardItems = items
-                self.selectedItem = items.first
+        Task {
+            do {
+                let items = try await repository.loadAll()
+                await MainActor.run {
+                    self.clipboardItems = items
+                    self.selectedItem = items.first
+                }
+                print("已加载 \(items.count) 个剪贴板项目")
+            } catch {
+                print("加载数据失败: \(error)")
+                // 如果加载失败，可以选择加载示例数据用于测试
+                // loadSampleData()
             }
-            print("已加载 \(items.count) 个剪贴板项目")
-        } catch {
-            print("加载数据失败: \(error)")
-            // 如果加载失败，可以选择加载示例数据用于测试
-            // loadSampleData()
+        }
+    }
+    
+    private func saveItem(_ item: ClipboardItem) {
+        Task {
+            do {
+                try await repository.save(item)
+            } catch {
+                print("保存项目失败: \(error)")
+            }
         }
     }
     
     private func saveDataAsync() {
-        // 防抖保存：避免频繁保存造成性能问题
-        guard !pendingSave else { return }
-        pendingSave = true
-        
-        saveTimer?.invalidate()
-        saveTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in
-            guard let self = self else { return }
-            
-            // 在后台线程执行保存操作，避免阻塞UI
-            Task.detached { [weak self] in
-                guard let self = self else { return }
-                do {
-                    try await self.dataManager.saveItems(self.clipboardItems)
-                    await MainActor.run {
-                        self.pendingSave = false
-                    }
-                } catch {
-                    print("保存数据失败: \(error)")
-                    await MainActor.run {
-                        self.pendingSave = false
-                    }
-                }
-            }
-        }
+        // SQLite版本中，单个项目保存已经在添加时完成
+        // 这个方法保留用于兼容性，但不执行任何操作
     }
     
     // 清理旧数据（可以定期调用）
     func cleanupOldData() {
         let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-        let filteredItems = clipboardItems.filter { $0.timestamp > thirtyDaysAgo || $0.isFavorite }
-        
-        if filteredItems.count != clipboardItems.count {
-            clipboardItems = filteredItems
-            saveDataAsync()
-            print("已清理 \(clipboardItems.count - filteredItems.count) 个过期项目")
+        Task {
+            do {
+                try await repository.cleanupOldData(olderThan: thirtyDaysAgo)
+                // 重新加载数据以更新内存中的列表
+                let items = try await repository.loadAll()
+                await MainActor.run {
+                    self.clipboardItems = items
+                    self.selectedItem = self.clipboardItems.first
+                }
+                print("已清理旧数据")
+            } catch {
+                print("清理数据失败: \(error)")
+            }
         }
     }
     

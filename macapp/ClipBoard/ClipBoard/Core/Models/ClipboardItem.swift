@@ -95,6 +95,25 @@ struct ClipboardItem: Identifiable, Hashable, Codable {
         self.filePath = filePath
     }
     
+    // 从数据库创建ClipboardItem的构造函数
+    init(id: UUID, content: String, type: ClipboardItemType, timestamp: Date, sourceApp: String, isFavorite: Bool, htmlContent: String?, copyCount: Int, firstCopyTime: Date, lastCopyTime: Date, sourceAppBundleID: String?, imageData: Data?, imageDimensions: String?, imageSize: Int64?, filePath: String?) {
+        self.id = id
+        self.content = content
+        self.type = type
+        self.timestamp = timestamp
+        self.sourceApp = sourceApp
+        self.isFavorite = isFavorite
+        self.htmlContent = htmlContent
+        self.copyCount = copyCount
+        self.firstCopyTime = firstCopyTime
+        self.lastCopyTime = lastCopyTime
+        self.sourceAppBundleID = sourceAppBundleID
+        self.imageData = imageData
+        self.imageDimensions = imageDimensions
+        self.imageSize = imageSize
+        self.filePath = filePath
+    }
+    
     mutating func incrementCopyCount() {
         self.copyCount += 1
         self.lastCopyTime = Date()
