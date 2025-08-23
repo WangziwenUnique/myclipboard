@@ -100,12 +100,6 @@ final class InputManager: ObservableObject {
         selectedIndex = items.count - 1
     }
     
-    func selectByNumber(_ number: Int) -> Bool {
-        let index = number - 1
-        guard index >= 0 && index < items.count else { return false }
-        selectedIndex = index
-        return true
-    }
     
     func reset() {
         selectedIndex = 0
@@ -177,13 +171,6 @@ final class InputManager: ObservableObject {
             self?.jumpToBottom()
         }
         
-        // 数字键快速选择
-        for i in 1...9 {
-            let shortcut = KeyboardShortcutAction.fromNumber(i)
-            shortcutManager.registerHandler(for: shortcut) { [weak self] in
-                _ = self?.selectByNumber(i)
-            }
-        }
         
         // 搜索快捷键
         shortcutManager.registerHandler(for: .focusSearch) { [weak self] in
@@ -243,17 +230,6 @@ final class InputManager: ObservableObject {
             }
         }
         
-        let numberSelectObserver = NotificationCenter.default.addObserver(
-            forName: .selectItemByNumber,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            if let number = notification.object as? Int {
-                Task { @MainActor in
-                    _ = self?.selectByNumber(number)
-                }
-            }
-        }
         
         let resetObserver = NotificationCenter.default.addObserver(
             forName: .resetSelection,
@@ -277,7 +253,7 @@ final class InputManager: ObservableObject {
         }
         
         observers = [navigateUpObserver, navigateDownObserver, selectItemObserver, 
-                    numberSelectObserver, resetObserver, copyItemObserver]
+                    resetObserver, copyItemObserver]
     }
     
     private func cleanupObservers() {

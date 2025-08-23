@@ -4,19 +4,11 @@ import AppKit
 import CryptoKit
 
 class ClipboardManager: NSObject, ObservableObject {
-    @Published var clipboardItems: [ClipboardItem] = []
-    @Published var selectedItem: ClipboardItem?
     @Published var isMonitoring: Bool = true
     
     private var lastClipboardContent: String = ""
     private let repository: ClipboardRepository = GRDBClipboardRepository()
-    private let maxItems = 1000  // 增加存储上限
-    
-    // 分页参数
-    private let pageSize = 100
-    private var currentPage = 0
-    private var isLoading = false
-    private var hasMoreData = true
+    private let maxDisplayItems = 50  // 每次显示的最大条数
     
     // Timer轮询监控
     private var clipboardTimer: Timer?
@@ -34,7 +26,6 @@ class ClipboardManager: NSObject, ObservableObject {
         // 从 UserDefaults 加载监控状态
         isMonitoring = UserDefaults.standard.object(forKey: "clipboardMonitoring") == nil ? true : UserDefaults.standard.bool(forKey: "clipboardMonitoring")
         
-        loadPersistedData()
         startTimerMonitoring()
     }
     
@@ -144,31 +135,8 @@ class ClipboardManager: NSObject, ObservableObject {
         )
         
         DispatchQueue.main.async {
-            // 检查重复项（基于图片数据哈希）
-            let imageHash = imageData.sha256
-            if let existingIndex = self.clipboardItems.firstIndex(where: { 
-                $0.type == .image && $0.imageData?.sha256 == imageHash 
-            }) {
-                // 找到重复项，增加复制次数并移到顶部
-                var existingItem = self.clipboardItems[existingIndex]
-                existingItem.incrementCopyCount()
-                self.clipboardItems.remove(at: existingIndex)
-                self.clipboardItems.insert(existingItem, at: 0)
-                
-                // 保存到数据库
-                self.saveItem(existingItem)
-            } else {
-                // 新项目，添加到列表和数据库
-                self.clipboardItems.insert(newItem, at: 0)
-                
-                // 限制数量
-                if self.clipboardItems.count > self.maxItems {
-                    self.clipboardItems = Array(self.clipboardItems.prefix(self.maxItems))
-                }
-                
-                // 保存到数据库
-                self.saveItem(newItem)
-            }
+            // 直接保存到数据库，不管理内存状态
+            self.saveItem(newItem)
         }
     }
     
@@ -193,28 +161,8 @@ class ClipboardManager: NSObject, ObservableObject {
         )
         
         DispatchQueue.main.async {
-            // 检查重复项
-            if let existingIndex = self.clipboardItems.firstIndex(where: { $0.content == content }) {
-                // 找到重复项，增加复制次数并移到顶部
-                var existingItem = self.clipboardItems[existingIndex]
-                existingItem.incrementCopyCount()
-                self.clipboardItems.remove(at: existingIndex)
-                self.clipboardItems.insert(existingItem, at: 0)
-                
-                // 保存到数据库
-                self.saveItem(existingItem)
-            } else {
-                // 新项目，添加到列表和数据库
-                self.clipboardItems.insert(newItem, at: 0)
-                
-                // 限制数量
-                if self.clipboardItems.count > self.maxItems {
-                    self.clipboardItems = Array(self.clipboardItems.prefix(self.maxItems))
-                }
-                
-                // 保存到数据库
-                self.saveItem(newItem)
-            }
+            // 直接保存到数据库，不管理内存状态
+            self.saveItem(newItem)
         }
     }
     
@@ -424,19 +372,12 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     func toggleFavorite(for item: ClipboardItem) {
-        if let index = clipboardItems.firstIndex(where: { $0.id == item.id }) {
-            var updatedItem = item
-            updatedItem.toggleFavorite()
-            clipboardItems[index] = updatedItem
-            saveItem(updatedItem)
-        }
+        var updatedItem = item
+        updatedItem.toggleFavorite()
+        saveItem(updatedItem)
     }
     
     func deleteItem(_ item: ClipboardItem) {
-        clipboardItems.removeAll { $0.id == item.id }
-        if selectedItem?.id == item.id {
-            selectedItem = clipboardItems.first
-        }
         Task {
             do {
                 if let itemId = item.id {
@@ -448,107 +389,73 @@ class ClipboardManager: NSObject, ObservableObject {
         }
     }
     
-    func searchItems(query: String) -> [ClipboardItem] {
+    func searchItems(query: String) async -> [ClipboardItem] {
         if query.isEmpty {
-            return clipboardItems
+            return await getRecentItems()
         }
-        // 暂时保持内存搜索，可以后续优化为数据库搜索
-        return clipboardItems.filter { item in
-            item.content.localizedCaseInsensitiveContains(query) ||
-            item.sourceApp.localizedCaseInsensitiveContains(query)
-        }
-    }
-    
-    func getItemsByCategory(_ category: ClipboardCategory) -> [ClipboardItem] {
-        // 暂时保持内存过滤，因为UI层仍在使用同步方法
-        switch category {
-        case .history:
-            return clipboardItems
-        case .favorites:
-            return clipboardItems.filter { $0.isFavorite }
-        case .text:
-            return clipboardItems.filter { $0.type == .text }
-        case .files:
-            return clipboardItems.filter { $0.type == .file }
-        case .images:
-            return clipboardItems.filter { $0.type == .image }
-        case .links:
-            return clipboardItems.filter { $0.type == .link }
-        case .mail:
-            return clipboardItems.filter { $0.type == .email }
-        }
-    }
-    
-    func getSortedItems(for category: ClipboardCategory, sortOption: SortOption, isReversed: Bool = false) -> [ClipboardItem] {
-        let items = getItemsByCategory(category)
-        let sortedItems: [ClipboardItem]
-        
-        switch sortOption {
-        case .lastCopyTime:
-            sortedItems = items.sorted { $0.lastCopyTime > $1.lastCopyTime }
-        case .firstCopyTime:
-            sortedItems = items.sorted { $0.firstCopyTime < $1.firstCopyTime }
-        case .numberOfCopies:
-            sortedItems = items.sorted { $0.copyCount > $1.copyCount }
-        case .size:
-            sortedItems = items.sorted { $0.content.count > $1.content.count }
-        }
-        
-        return isReversed ? sortedItems.reversed() : sortedItems
-    }
-    
-    // MARK: - Data Persistence
-    
-    private func loadPersistedData() {
-        Task {
-            await loadPage(0)
-        }
-    }
-    
-    private func loadPage(_ page: Int) async {
-        guard !isLoading else { return }
-        isLoading = true
         
         do {
-            let items = try await repository.loadPage(page: page, limit: pageSize)
-            await MainActor.run {
-                if page == 0 {
-                    self.clipboardItems = items
-                    self.selectedItem = items.first
-                } else {
-                    self.clipboardItems.append(contentsOf: items)
-                }
-                self.hasMoreData = items.count == self.pageSize
-                self.currentPage = page
-            }
-            print("已加载第\(page)页，共 \(items.count) 个剪贴板项目")
+            return try await repository.search(query: query)
         } catch {
-            print("加载第\(page)页失败: \(error)")
+            print("搜索失败: \(error)")
+            return []
         }
-        
-        isLoading = false
     }
     
-    func loadMoreIfNeeded() {
-        guard !isLoading && hasMoreData else { return }
-        let nextPage = currentPage + 1
-        Task {
-            await loadPage(nextPage)
+    func searchItems(query: String, sourceApp: String?) async -> [ClipboardItem] {
+        if query.isEmpty {
+            return await getRecentItems()
+        }
+        
+        do {
+            let searchResults = try await repository.search(query: query)
+            // 如果指定了应用过滤，在结果中进行过滤
+            if let app = sourceApp {
+                return searchResults.filter { $0.sourceApp == app }
+            }
+            return searchResults
+        } catch {
+            print("搜索失败: \(error)")
+            return []
+        }
+    }
+    
+    func getItemsByCategory(_ category: ClipboardCategory) async -> [ClipboardItem] {
+        do {
+            let items = try await repository.getByCategory(category)
+            return Array(items.prefix(maxDisplayItems))
+        } catch {
+            print("获取分类数据失败: \(error)")
+            return []
+        }
+    }
+    
+    func getSortedItems(for category: ClipboardCategory, sortOption: SortOption, isReversed: Bool = false) async -> [ClipboardItem] {
+        do {
+            let items = try await repository.getSortedItems(for: category, sortOption: sortOption, isReversed: isReversed)
+            return Array(items.prefix(maxDisplayItems))
+        } catch {
+            print("获取排序数据失败: \(error)")
+            return []
+        }
+    }
+    
+    // MARK: - Data Access
+    
+    func getRecentItems() async -> [ClipboardItem] {
+        do {
+            let items = try await repository.loadPage(page: 0, limit: maxDisplayItems)
+            return items
+        } catch {
+            print("获取最近数据失败: \(error)")
+            return []
         }
     }
     
     private func saveItem(_ item: ClipboardItem) {
         Task {
             do {
-                let savedItem = try await repository.save(item)
-                // 如果是新item（ID为nil），需要更新内存中的item为带有正确ID的版本
-                if item.id == nil {
-                    await MainActor.run {
-                        if let index = self.clipboardItems.firstIndex(where: { $0.id == nil }) {
-                            self.clipboardItems[index] = savedItem
-                        }
-                    }
-                }
+                _ = try await repository.save(item)
             } catch {
                 print("保存项目失败: \(error)")
             }
@@ -566,16 +473,19 @@ class ClipboardManager: NSObject, ObservableObject {
         Task {
             do {
                 try await repository.cleanupOldData(olderThan: thirtyDaysAgo)
-                // 重新加载数据以更新内存中的列表
-                let items = try await repository.loadAll()
-                await MainActor.run {
-                    self.clipboardItems = items
-                    self.selectedItem = self.clipboardItems.first
-                }
                 print("已清理旧数据")
             } catch {
                 print("清理数据失败: \(error)")
             }
+        }
+    }
+    
+    func getDistinctSourceApps() async -> [String] {
+        do {
+            return try await repository.getDistinctSourceApps()
+        } catch {
+            print("获取应用列表失败: \(error)")
+            return []
         }
     }
     
@@ -606,6 +516,7 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     private func loadSampleData() {
+        // 示例数据现在通过数据库加载，不需要内存管理
         let sampleItems = [
             ClipboardItem(content: "LAIS-9074-5758-1212-0858427276105608", sourceApp: "Xcode"),
             ClipboardItem(content: """
@@ -638,8 +549,10 @@ class ClipboardManager: NSObject, ObservableObject {
             ClipboardItem(content: "https://byaitech.feishu.cn/wiki/N47qwKJq8isqAc...", type: .link, sourceApp: "Safari")
         ]
         
-        clipboardItems = sampleItems
-        selectedItem = sampleItems.first
+        // 保存示例数据到数据库
+        for item in sampleItems {
+            saveItem(item)
+        }
     }
 }
 

@@ -87,20 +87,13 @@ class KeyboardShortcutManager: ObservableObject {
         return max(currentListIndex - 1, 0)
     }
     
-    // 根据数字键获取对应的列表索引
-    func getListIndexForNumber(_ number: Int) -> Int? {
-        guard number >= 1 && number <= 9 && number <= listItemsCount else { return nil }
-        return number - 1
-    }
     
     // 判断快捷键是否应该在当前状态下生效
     func shouldHandleShortcut(_ action: KeyboardShortcutAction) -> Bool {
         guard let info = registeredShortcuts[action], info.isEnabled else { return false }
         
         switch action {
-        case .navigateUp, .navigateDown, .jumpToTop, .jumpToBottom, 
-             .selectItem1, .selectItem2, .selectItem3, .selectItem4, .selectItem5,
-             .selectItem6, .selectItem7, .selectItem8, .selectItem9:
+        case .navigateUp, .navigateDown, .jumpToTop, .jumpToBottom:
             return true // 允许在任何状态下进行列表导航
         case .selectItem:
             return true // 回车键在任何状态下都可以使用
@@ -177,9 +170,7 @@ class KeyboardShortcutManager: ObservableObject {
             ].compactMap { registeredShortcuts[$0] },
             
             "列表导航": [
-                .navigateUp, .navigateDown, .selectItem, .jumpToTop, .jumpToBottom,
-                .selectItem1, .selectItem2, .selectItem3, .selectItem4, .selectItem5,
-                .selectItem6, .selectItem7, .selectItem8, .selectItem9
+                .navigateUp, .navigateDown, .selectItem, .jumpToTop, .jumpToBottom
             ].compactMap { registeredShortcuts[$0] },
             
             "搜索功能": [

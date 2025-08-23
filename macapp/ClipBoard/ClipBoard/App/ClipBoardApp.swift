@@ -14,7 +14,6 @@ extension Notification.Name {
     static let navigateUp = Notification.Name("clipboard.navigateUp")
     static let navigateDown = Notification.Name("clipboard.navigateDown")
     static let selectCurrentItem = Notification.Name("clipboard.selectCurrentItem")
-    static let selectItemByNumber = Notification.Name("clipboard.selectItemByNumber")
     static let resetSelection = Notification.Name("clipboard.resetSelection")
     static let textInputCommand = Notification.Name("clipboard.textInputCommand")
     static let copyCurrentItem = Notification.Name("clipboard.copyCurrentItem")
@@ -379,16 +378,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         
-        // 数字键快速选择
-        shortcutManager.registerHandler(for: .selectItem1) { self.handleNumberSelection(1) }
-        shortcutManager.registerHandler(for: .selectItem2) { self.handleNumberSelection(2) }
-        shortcutManager.registerHandler(for: .selectItem3) { self.handleNumberSelection(3) }
-        shortcutManager.registerHandler(for: .selectItem4) { self.handleNumberSelection(4) }
-        shortcutManager.registerHandler(for: .selectItem5) { self.handleNumberSelection(5) }
-        shortcutManager.registerHandler(for: .selectItem6) { self.handleNumberSelection(6) }
-        shortcutManager.registerHandler(for: .selectItem7) { self.handleNumberSelection(7) }
-        shortcutManager.registerHandler(for: .selectItem8) { self.handleNumberSelection(8) }
-        shortcutManager.registerHandler(for: .selectItem9) { self.handleNumberSelection(9) }
         
         // 功能快捷键
         shortcutManager.registerHandler(for: .copyItem) {
@@ -403,13 +392,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         print("✅ 快捷键处理器注册完成")
     }
     
-    // 处理数字键选择的辅助方法
-    private func handleNumberSelection(_ number: Int) {
-        print("   🔢 数字键\(number) - 快速选择")
-        DispatchQueue.main.async {
-            NotificationCenter.default.post(name: .selectItemByNumber, object: number)
-        }
-    }
     
     // MARK: - 调试辅助方法
     

@@ -14,6 +14,7 @@ struct ContentView: View {
     @ObservedObject private var shortcutManager = KeyboardShortcutManager.shared
     @State private var selectedCategory: ClipboardCategory = .history
     @State private var selectedApp: String? = nil  // 新增：选中的应用筛选
+    @State private var selectedItem: ClipboardItem? = nil  // 移到ContentView管理
     @State private var globalTooltip: GlobalTooltipData? = nil
     @State private var isSidebarVisible: Bool = true
     @State private var isWindowPinned: Bool = false
@@ -71,7 +72,7 @@ struct ContentView: View {
                     
                     ClipboardListView(
                         clipboardManager: clipboardManager,
-                        selectedItem: $clipboardManager.selectedItem,
+                        selectedItem: $selectedItem,
                         category: selectedCategory,
                         selectedApp: selectedApp,  // 传递应用筛选状态
                         isSidebarVisible: $isSidebarVisible,
@@ -90,7 +91,7 @@ struct ContentView: View {
                     
                     DetailView(
                         clipboardManager: clipboardManager,
-                        selectedItem: clipboardManager.selectedItem
+                        selectedItem: selectedItem
                     )
                     .frame(width: detailWidth, height: geometry.size.height)
                 }

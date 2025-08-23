@@ -91,27 +91,15 @@ struct SidebarView: View {
     @State private var isAppSectionExpanded: Bool = false
     // 下拉按钮悬浮状态
     @State private var isDropdownHovered: Bool = false
+    // 可用应用列表
+    @State private var availableApps: [String] = []
     
     // 常用分类清单（不包含 history）
     private let commonCategories: [ClipboardCategory] = [.favorites, .text, .images, .links, .files, .mail]
     
-    // 根据已有剪贴板数据生成来源应用列表（去重、按最新排序）
+    // 获取可用应用列表
     private var appSourceIcons: [String] {
-        let itemsWithApp = clipboardManager.clipboardItems
-            .filter { !$0.sourceApp.isEmpty && $0.sourceApp != "Unknown" }
-            .sorted { $0.timestamp > $1.timestamp } // 按时间排序，最新在前
-        
-        var seenApps = Set<String>()
-        var orderedApps: [String] = []
-        
-        for item in itemsWithApp {
-            if !seenApps.contains(item.sourceApp) {
-                seenApps.insert(item.sourceApp)
-                orderedApps.append(item.sourceApp)
-            }
-        }
-        
-        return Array(orderedApps.prefix(8)) // 限制最多显示8个应用
+        return availableApps
     }
     
     // 显示的应用图标列表（根据展开状态决定）
@@ -212,6 +200,11 @@ struct SidebarView: View {
             // CompactBottomControlBar()
         }
         .background(SidebarView.backgroundColor)
+        .onAppear {
+            Task {
+                availableApps = await clipboardManager.getDistinctSourceApps()
+            }
+        }
     }
 }
 

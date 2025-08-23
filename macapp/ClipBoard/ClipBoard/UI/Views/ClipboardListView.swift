@@ -1,33 +1,6 @@
 import SwiftUI
 import AppKit
 
-// MARK: - Supporting Types
-
-enum SortOption: CaseIterable {
-    case lastCopyTime
-    case firstCopyTime
-    case numberOfCopies
-    case size
-    
-    var displayName: String {
-        switch self {
-        case .lastCopyTime: return "Last Copy Time"
-        case .firstCopyTime: return "First Copy Time"
-        case .numberOfCopies: return "Number of Copies"
-        case .size: return "Size"
-        }
-    }
-}
-
-struct SortConfiguration {
-    var option: SortOption = .lastCopyTime
-    var isReversed: Bool = false
-    
-    mutating func toggleReverse() {
-        isReversed.toggle()
-    }
-}
-
 // MARK: - Text Highlighting
 
 struct HighlightedText: View {
@@ -117,9 +90,10 @@ struct ClipboardListView: View {
     @Binding var isWindowPinned: Bool
     @ObservedObject var shortcutManager: KeyboardShortcutManager
     
-    // Simplified state management - 使用统一的InputManager
+    // 简化状态管理
     @StateObject private var inputManager: InputManager
     @State private var sortConfig = SortConfiguration()
+    @State private var items: [ClipboardItem] = []
     
     init(clipboardManager: ClipboardManager,
          selectedItem: Binding<ClipboardItem?>,
@@ -143,23 +117,17 @@ struct ClipboardListView: View {
         ))
     }
     
-    // Simplified filtered items computation
+    // 简化的过滤逻辑：只处理应用过滤，搜索已在数据库层完成
     private var filteredItems: [ClipboardItem] {
-        let items = clipboardManager.getSortedItems(
-            for: category, 
-            sortOption: sortConfig.option, 
-            isReversed: sortConfig.isReversed
-        )
+        // 搜索时不需要UI层过滤，数据库FTS5已经处理
+        if !inputManager.searchText.isEmpty {
+            return items
+        }
         
-        let appFilteredItems = selectedApp.map { app in
+        // 非搜索时只需要应用过滤
+        return selectedApp.map { app in
             items.filter { $0.sourceApp == app }
         } ?? items
-        
-        return inputManager.searchText.isEmpty ? appFilteredItems : 
-            appFilteredItems.filter { item in
-                item.content.localizedCaseInsensitiveContains(inputManager.searchText) ||
-                item.sourceApp.localizedCaseInsensitiveContains(inputManager.searchText)
-            }
     }
     
     var body: some View {
@@ -182,6 +150,12 @@ struct ClipboardListView: View {
         .onChange(of: inputManager.selectedItem) { _, item in
             selectedItem = item
         }
+        .onChange(of: category) { _, _ in
+            loadData()
+        }
+        .onChange(of: sortConfig) { _, _ in
+            loadData()
+        }
     }
     
     // MARK: - View Components
@@ -195,6 +169,7 @@ struct ClipboardListView: View {
             shouldFocusOnAppear: true,
             onTextChange: { newText in
                 inputManager.updateSearchText(newText)
+                loadData()
             }
         )
         .padding(.horizontal, 16)
@@ -242,12 +217,6 @@ struct ClipboardListView: View {
                     .contextMenu {
                         itemContextMenu(for: item)
                     }
-                    .onAppear {
-                        // 检测是否需要加载更多数据
-                        if item == filteredItems.last {
-                            clipboardManager.loadMoreIfNeeded()
-                        }
-                    }
                 }
             }
             .padding(.horizontal, 8)
@@ -275,7 +244,7 @@ struct ClipboardListView: View {
     // MARK: - Setup Methods
     
     private func setupView() {
-        inputManager.updateItems(filteredItems)
+        loadData()
         inputManager.setup()
         
         shortcutManager.updateListState(
@@ -283,6 +252,31 @@ struct ClipboardListView: View {
             currentIndex: inputManager.currentIndex,
             totalCount: filteredItems.count
         )
+    }
+    
+    private func loadData() {
+        Task {
+            let loadedItems: [ClipboardItem]
+            
+            if inputManager.searchText.isEmpty {
+                loadedItems = await clipboardManager.getSortedItems(
+                    for: category,
+                    sortOption: sortConfig.option,
+                    isReversed: sortConfig.isReversed
+                )
+            } else {
+                loadedItems = await clipboardManager.searchItems(
+                    query: inputManager.searchText,
+                    sourceApp: selectedApp
+                )
+            }
+            
+            await MainActor.run {
+                self.items = loadedItems
+                inputManager.updateItems(filteredItems)
+                selectedItem = inputManager.selectedItem
+            }
+        }
     }
     
 }

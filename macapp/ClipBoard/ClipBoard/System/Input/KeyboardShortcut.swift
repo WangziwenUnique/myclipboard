@@ -27,15 +27,6 @@ enum KeyboardShortcutAction: CaseIterable {
     case selectItem
     case jumpToTop
     case jumpToBottom
-    case selectItem1
-    case selectItem2
-    case selectItem3
-    case selectItem4
-    case selectItem5
-    case selectItem6
-    case selectItem7
-    case selectItem8
-    case selectItem9
     
     // 搜索功能
     case focusSearch
@@ -66,15 +57,6 @@ enum KeyboardShortcutAction: CaseIterable {
         case .selectItem: return "\r"  // Return/Enter
         case .jumpToTop: return "\u{F700}"  // NSUpArrowFunctionKey
         case .jumpToBottom: return "\u{F701}"  // NSDownArrowFunctionKey
-        case .selectItem1: return "1"
-        case .selectItem2: return "2"
-        case .selectItem3: return "3"
-        case .selectItem4: return "4"
-        case .selectItem5: return "5"
-        case .selectItem6: return "6"
-        case .selectItem7: return "7"
-        case .selectItem8: return "8"
-        case .selectItem9: return "9"
         case .focusSearch: return "f"
         case .closeWindow: return "\u{001B}"  // ESC
         case .toggleFocus: return "\t"  // Tab
@@ -96,8 +78,6 @@ enum KeyboardShortcutAction: CaseIterable {
             return []
         case .jumpToTop, .jumpToBottom:
             return .command
-        case .selectItem1, .selectItem2, .selectItem3, .selectItem4, .selectItem5, .selectItem6, .selectItem7, .selectItem8, .selectItem9:
-            return []
         case .focusSearch:
             return .command
         case .closeWindow:
@@ -132,15 +112,6 @@ enum KeyboardShortcutAction: CaseIterable {
         case .selectItem: return "选择当前项"
         case .jumpToTop: return "跳到顶部"
         case .jumpToBottom: return "跳到底部"
-        case .selectItem1: return "选择第1项"
-        case .selectItem2: return "选择第2项"
-        case .selectItem3: return "选择第3项"
-        case .selectItem4: return "选择第4项"
-        case .selectItem5: return "选择第5项"
-        case .selectItem6: return "选择第6项"
-        case .selectItem7: return "选择第7项"
-        case .selectItem8: return "选择第8项"
-        case .selectItem9: return "选择第9项"
         case .focusSearch: return "聚焦搜索框"
         case .closeWindow: return "关闭窗口"
         case .toggleFocus: return "切换搜索框和列表焦点"
@@ -189,22 +160,8 @@ struct KeyboardShortcutInfo {
     }
 }
 
-// 扩展键盘快捷键以支持数字
+// keyCode映射扩展
 extension KeyboardShortcutAction {
-    static func fromNumber(_ number: Int) -> KeyboardShortcutAction {
-        switch number {
-        case 1: return .selectItem1
-        case 2: return .selectItem2
-        case 3: return .selectItem3
-        case 4: return .selectItem4
-        case 5: return .selectItem5
-        case 6: return .selectItem6
-        case 7: return .selectItem7
-        case 8: return .selectItem8
-        case 9: return .selectItem9
-        default: return .selectItem1
-        }
-    }
     
     // keyCode映射 - 统一按键定义的单一数据源
     var keyCode: UInt16? {
@@ -215,16 +172,6 @@ extension KeyboardShortcutAction {
         case .navigateUp: return 126       // 上箭头
         case .navigateDown: return 125     // 下箭头
         
-        // 数字键快速选择（直接数字键，无修饰符）
-        case .selectItem1: return 18       // 1
-        case .selectItem2: return 19       // 2
-        case .selectItem3: return 20       // 3
-        case .selectItem4: return 21       // 4
-        case .selectItem5: return 23       // 5
-        case .selectItem6: return 22       // 6
-        case .selectItem7: return 26       // 7
-        case .selectItem8: return 28       // 8
-        case .selectItem9: return 25       // 9
         
         // 分类切换（Cmd+数字键）
         case .selectHistory: return 18     // Cmd+1

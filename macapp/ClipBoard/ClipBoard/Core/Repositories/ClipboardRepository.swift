@@ -12,4 +12,5 @@ protocol ClipboardRepository {
     func updateFavoriteStatus(_ id: Int64, isFavorite: Bool) async throws
     func cleanupOldData(olderThan date: Date) async throws
     func getCount() async throws -> Int
+    func getDistinctSourceApps() async throws -> [String]
 }
