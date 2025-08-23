@@ -9,7 +9,7 @@ class ClipboardManager: NSObject, ObservableObject {
     @Published var isMonitoring: Bool = true
     
     private var lastClipboardContent: String = ""
-    private let repository: ClipboardRepository = SQLiteClipboardRepository()
+    private let repository: ClipboardRepository = GRDBClipboardRepository()
     private let maxItems = 1000  // 增加存储上限
     
     // 分页参数
@@ -439,7 +439,9 @@ class ClipboardManager: NSObject, ObservableObject {
         }
         Task {
             do {
-                try await repository.delete(item.id)
+                if let itemId = item.id {
+                    try await repository.delete(itemId)
+                }
             } catch {
                 print("删除项目失败: \(error)")
             }
@@ -539,10 +541,10 @@ class ClipboardManager: NSObject, ObservableObject {
         Task {
             do {
                 let savedItem = try await repository.save(item)
-                // 如果是新item（ID为0），需要更新内存中的item为带有正确ID的版本
-                if item.id == 0 {
+                // 如果是新item（ID为nil），需要更新内存中的item为带有正确ID的版本
+                if item.id == nil {
                     await MainActor.run {
-                        if let index = self.clipboardItems.firstIndex(where: { $0.id == 0 }) {
+                        if let index = self.clipboardItems.firstIndex(where: { $0.id == nil }) {
                             self.clipboardItems[index] = savedItem
                         }
                     }
