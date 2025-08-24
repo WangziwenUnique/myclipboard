@@ -62,38 +62,30 @@ struct ContentView: View {
                         // 分割线 1
                         Rectangle()
                             .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
-                            .frame(width: 0.5, height: geometry.size.height)
+                            .frame(width: 0.5)
                     }
                 
-                    // 中间列表视图 - 动态调整宽度
-                    let sidebarActualWidth: CGFloat = isSidebarVisible ? 50.0 : 0
-                    let availableWidth = geometry.size.width - sidebarActualWidth - (isSidebarVisible ? 1 : 0)
-                    let listWidth = availableWidth / 2 - 0.25
+                    // 主内容区域 - 使用HSplitView实现可拖拽分割线
+                    let sidebarActualWidth: CGFloat = isSidebarVisible ? 50.5 : 0 // 50 + 0.5 for Rectangle
+                    let mainContentWidth = geometry.size.width - sidebarActualWidth
                     
-                    ClipboardListView(
-                        clipboardManager: clipboardManager,
-                        selectedItem: $selectedItem,
-                        category: selectedCategory,
-                        selectedApp: selectedApp,  // 传递应用筛选状态
-                        isSidebarVisible: $isSidebarVisible,
-                        isWindowPinned: $isWindowPinned,
-                        shortcutManager: shortcutManager
-                    )
-                    .frame(width: listWidth, height: geometry.size.height)
-                    
-                    // 分割线 2
-                    Rectangle()
-                        .fill(Color(red: 0.7, green: 0.7, blue: 0.7, opacity: 0.3))
-                        .frame(width: 0.5, height: geometry.size.height)
-                    
-                    // 右侧详情视图 - 动态调整宽度
-                    let detailWidth = availableWidth / 2 - 0.25
-                    
-                    DetailView(
-                        clipboardManager: clipboardManager,
-                        selectedItem: selectedItem
-                    )
-                    .frame(width: detailWidth, height: geometry.size.height)
+                    CustomSplitView {
+                        ClipboardListView(
+                            clipboardManager: clipboardManager,
+                            selectedItem: $selectedItem,
+                            category: selectedCategory,
+                            selectedApp: selectedApp,
+                            isSidebarVisible: $isSidebarVisible,
+                            isWindowPinned: $isWindowPinned,
+                            shortcutManager: shortcutManager
+                        )
+                    } content2: {
+                        DetailView(
+                            clipboardManager: clipboardManager,
+                            selectedItem: selectedItem
+                        )
+                    }
+                    .frame(width: mainContentWidth, height: geometry.size.height)
                 }
                 
                 // 全局弹窗层 - 使用HStack实现真正的左边缘对齐

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0807356F2E59C8FB0058640F /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 0807356E2E59C8FB0058640F /* GRDB */; };
+		080735782E5A95F50058640F /* STTextView in Frameworks */ = {isa = PBXBuildFile; productRef = 080735772E5A95F50058640F /* STTextView */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,6 +58,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				0807356F2E59C8FB0058640F /* GRDB in Frameworks */,
+				080735782E5A95F50058640F /* STTextView in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -119,6 +121,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				080735762E5A95EB0058640F /* PBXTargetDependency */,
 				0807356C2E59C8DD0058640F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
@@ -127,6 +130,7 @@
 			name = ClipBoard;
 			packageProductDependencies = (
 				0807356E2E59C8FB0058640F /* GRDB */,
+				080735772E5A95F50058640F /* STTextView */,
 			);
 			productName = ClipBoard;
 			productReference = 0835588A2E4A0EC600FCBA96 /* ClipBoard.app */;
@@ -212,6 +216,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				0807356A2E59C8790058640F /* XCLocalSwiftPackageReference "../../../../../github/GRDB.swift" */,
+				080735742E5A95D90058640F /* XCLocalSwiftPackageReference "../../../../../github/STTextView" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0835588B2E4A0EC600FCBA96 /* Products */;
@@ -277,6 +282,10 @@
 		0807356C2E59C8DD0058640F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			productRef = 0807356B2E59C8DD0058640F /* GRDB */;
+		};
+		080735762E5A95EB0058640F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = 080735752E5A95EB0058640F /* STTextView */;
 		};
 		0835589F2E4A0EC700FCBA96 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -615,6 +624,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../../../../github/GRDB.swift;
 		};
+		080735742E5A95D90058640F /* XCLocalSwiftPackageReference "../../../../../github/STTextView" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../../../../github/STTextView;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -627,6 +640,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0807356A2E59C8790058640F /* XCLocalSwiftPackageReference "../../../../../github/GRDB.swift" */;
 			productName = GRDB;
+		};
+		080735752E5A95EB0058640F /* STTextView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 080735742E5A95D90058640F /* XCLocalSwiftPackageReference "../../../../../github/STTextView" */;
+			productName = STTextView;
+		};
+		080735772E5A95F50058640F /* STTextView */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 080735742E5A95D90058640F /* XCLocalSwiftPackageReference "../../../../../github/STTextView" */;
+			productName = STTextView;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

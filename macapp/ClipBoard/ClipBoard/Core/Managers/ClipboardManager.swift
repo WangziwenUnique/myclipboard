@@ -5,6 +5,7 @@ import CryptoKit
 
 class ClipboardManager: NSObject, ObservableObject {
     @Published var isMonitoring: Bool = true
+    @Published var dataDidChange: Bool = false  // 用于通知UI数据变化
     
     private var lastClipboardContent: String = ""
     private let repository: ClipboardRepository = GRDBClipboardRepository()
@@ -378,38 +379,35 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     func deleteItem(_ item: ClipboardItem) {
-        Task {
-            do {
-                if let itemId = item.id {
-                    try await repository.delete(itemId)
-                }
-            } catch {
-                print("删除项目失败: \(error)")
+        do {
+            if let itemId = item.id {
+                try repository.delete(itemId)
             }
+        } catch {
+            print("删除项目失败: \(error)")
         }
     }
     
-    func searchItems(query: String) async -> [ClipboardItem] {
+    func searchItems(query: String) -> [ClipboardItem] {
         if query.isEmpty {
-            return await getRecentItems()
+            return getRecentItems()
         }
         
         do {
-            return try await repository.search(query: query)
+            return try repository.search(query: query)
         } catch {
             print("搜索失败: \(error)")
             return []
         }
     }
     
-    func searchItems(query: String, sourceApp: String?) async -> [ClipboardItem] {
+    func searchItems(query: String, sourceApp: String?) -> [ClipboardItem] {
         if query.isEmpty {
-            return await getRecentItems()
+            return getRecentItems()
         }
         
         do {
-            let searchResults = try await repository.search(query: query)
-            // 如果指定了应用过滤，在结果中进行过滤
+            let searchResults = try repository.search(query: query)
             if let app = sourceApp {
                 return searchResults.filter { $0.sourceApp == app }
             }
@@ -420,9 +418,9 @@ class ClipboardManager: NSObject, ObservableObject {
         }
     }
     
-    func getItemsByCategory(_ category: ClipboardCategory) async -> [ClipboardItem] {
+    func getItemsByCategory(_ category: ClipboardCategory) -> [ClipboardItem] {
         do {
-            let items = try await repository.getByCategory(category)
+            let items = try repository.getByCategory(category)
             return Array(items.prefix(maxDisplayItems))
         } catch {
             print("获取分类数据失败: \(error)")
@@ -430,9 +428,9 @@ class ClipboardManager: NSObject, ObservableObject {
         }
     }
     
-    func getSortedItems(for category: ClipboardCategory, sortOption: SortOption, isReversed: Bool = false) async -> [ClipboardItem] {
+    func getSortedItems(for category: ClipboardCategory, sortOption: SortOption, isReversed: Bool = false) -> [ClipboardItem] {
         do {
-            let items = try await repository.getSortedItems(for: category, sortOption: sortOption, isReversed: isReversed)
+            let items = try repository.getSortedItems(for: category, sortOption: sortOption, isReversed: isReversed)
             return Array(items.prefix(maxDisplayItems))
         } catch {
             print("获取排序数据失败: \(error)")
@@ -442,10 +440,10 @@ class ClipboardManager: NSObject, ObservableObject {
     
     // MARK: - Data Access
     
-    func getRecentItems() async -> [ClipboardItem] {
+    func getRecentItems() -> [ClipboardItem] {
         do {
-            let items = try await repository.loadPage(page: 0, limit: maxDisplayItems)
-            return items
+            let items = try repository.loadAll()
+            return Array(items.prefix(maxDisplayItems))
         } catch {
             print("获取最近数据失败: \(error)")
             return []
@@ -453,12 +451,14 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     private func saveItem(_ item: ClipboardItem) {
-        Task {
-            do {
-                _ = try await repository.save(item)
-            } catch {
-                print("保存项目失败: \(error)")
+        do {
+            _ = try repository.save(item)
+            // 触发UI更新
+            DispatchQueue.main.async {
+                self.dataDidChange.toggle()
             }
+        } catch {
+            print("保存项目失败: \(error)")
         }
     }
     
@@ -468,21 +468,11 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     // 清理旧数据（可以定期调用）
-    func cleanupOldData() {
-        let thirtyDaysAgo = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-        Task {
-            do {
-                try await repository.cleanupOldData(olderThan: thirtyDaysAgo)
-                print("已清理旧数据")
-            } catch {
-                print("清理数据失败: \(error)")
-            }
-        }
-    }
+    // 内存数据库自动LRU管理，不需要手动清理
     
-    func getDistinctSourceApps() async -> [String] {
+    func getDistinctSourceApps() -> [String] {
         do {
-            return try await repository.getDistinctSourceApps()
+            return try repository.getDistinctSourceApps()
         } catch {
             print("获取应用列表失败: \(error)")
             return []

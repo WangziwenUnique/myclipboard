@@ -119,7 +119,7 @@ struct ClipboardListView: View {
     
     // 简化的过滤逻辑：只处理应用过滤，搜索已在数据库层完成
     private var filteredItems: [ClipboardItem] {
-        // 搜索时不需要UI层过滤，数据库FTS5已经处理
+        // 搜索时不需要UI层过滤，内存数据库LIKE查询已经处理
         if !inputManager.searchText.isEmpty {
             return items
         }
@@ -143,18 +143,21 @@ struct ClipboardListView: View {
         .onDisappear {
             inputManager.cleanup()
         }
-        .onChange(of: filteredItems) { _, items in
-            inputManager.updateItems(items)
+        .onChange(of: filteredItems) { oldValue, newValue in
+            inputManager.updateItems(newValue)
             selectedItem = inputManager.selectedItem
         }
-        .onChange(of: inputManager.selectedItem) { _, item in
-            selectedItem = item
+        .onChange(of: inputManager.selectedItem) { oldValue, newValue in
+            selectedItem = newValue
         }
-        .onChange(of: category) { _, _ in
+        .onChange(of: category) { oldValue, newValue in
             loadData()
         }
-        .onChange(of: sortConfig) { _, _ in
+        .onChange(of: sortConfig) { oldValue, newValue in
             loadData()
+        }
+        .onChange(of: clipboardManager.dataDidChange) {
+            loadData()  // 监听剪切板数据变化
         }
     }
     
@@ -255,28 +258,24 @@ struct ClipboardListView: View {
     }
     
     private func loadData() {
-        Task {
-            let loadedItems: [ClipboardItem]
-            
-            if inputManager.searchText.isEmpty {
-                loadedItems = await clipboardManager.getSortedItems(
-                    for: category,
-                    sortOption: sortConfig.option,
-                    isReversed: sortConfig.isReversed
-                )
-            } else {
-                loadedItems = await clipboardManager.searchItems(
-                    query: inputManager.searchText,
-                    sourceApp: selectedApp
-                )
-            }
-            
-            await MainActor.run {
-                self.items = loadedItems
-                inputManager.updateItems(filteredItems)
-                selectedItem = inputManager.selectedItem
-            }
+        let loadedItems: [ClipboardItem]
+        
+        if inputManager.searchText.isEmpty {
+            loadedItems = clipboardManager.getSortedItems(
+                for: category,
+                sortOption: sortConfig.option,
+                isReversed: sortConfig.isReversed
+            )
+        } else {
+            loadedItems = clipboardManager.searchItems(
+                query: inputManager.searchText,
+                sourceApp: selectedApp
+            )
         }
+        
+        self.items = loadedItems
+        inputManager.updateItems(filteredItems)
+        selectedItem = inputManager.selectedItem
     }
     
 }

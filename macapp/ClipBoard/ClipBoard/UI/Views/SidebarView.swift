@@ -201,9 +201,7 @@ struct SidebarView: View {
         }
         .background(SidebarView.backgroundColor)
         .onAppear {
-            Task {
-                availableApps = await clipboardManager.getDistinctSourceApps()
-            }
+            availableApps = clipboardManager.getDistinctSourceApps()
         }
     }
 }

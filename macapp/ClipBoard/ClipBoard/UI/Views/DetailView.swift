@@ -1,4 +1,5 @@
 import SwiftUI
+import STTextView
 
 struct DetailView: View {
     @ObservedObject var clipboardManager: ClipboardManager
@@ -18,11 +19,12 @@ struct DetailView: View {
                 
                 // 内容区域 - 移除标签页，直接显示内容
                 if item.type == .image {
-                    ImageContentView(item: item)
+                    AnyView(ImageContentView(item: item))
                 } else if item.type == .link {
-                    LinkContentView(item: item)
+                    AnyView(LinkContentView(item: item))
                 } else {
-                    TextContentView(item: item)
+                    AnyView(TextContentView(item: item)
+                        .background(SidebarView.backgroundColor))
                 }
                 
                 // 底部元数据
@@ -184,21 +186,42 @@ struct ImageContentView: View {
     }
 }
 
-struct TextContentView: View {
+struct TextContentView: NSViewRepresentable {
     let item: ClipboardItem
     
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(item.content)
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundColor(.white)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(16)
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = STTextView()
+        textView.text = item.content
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.textColor = .white
+        textView.backgroundColor = NSColor.clear
+        
+        let scrollView = NSScrollView()
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+        scrollView.autohidesScrollers = true
+        
+        // 使用NSScrollView原生contentInsets实现内边距
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = NSEdgeInsets(top: 12, left: 16, bottom: 12, right: 16)
+        
+        // 修复背景色问题
+        let bgColor = NSColor(red: 0.12, green: 0.12, blue: 0.12, alpha: 1.0)
+        scrollView.backgroundColor = bgColor
+        scrollView.drawsBackground = true
+        scrollView.contentView.backgroundColor = bgColor
+        
+        return scrollView
+    }
+    
+    func updateNSView(_ nsView: NSScrollView, context: Context) {
+        if let textView = nsView.documentView as? STTextView,
+           textView.text != item.content {
+            textView.text = item.content
         }
-        .background(SidebarView.backgroundColor)
     }
 }
 

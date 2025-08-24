@@ -4,12 +4,23 @@ import GRDB
 class GRDBDatabaseManager {
     static let shared = GRDBDatabaseManager()
     
-    private var dbWriter: DatabaseWriter!
+    private var memoryDB: DatabaseQueue!
+    private var diskDB: DatabaseQueue!
     
     private init() {
         do {
-            dbWriter = try openDatabase()
-            try migrator.migrate(dbWriter)
+            // 初始化内存数据库
+            memoryDB = try DatabaseQueue()
+            try memoryMigrator.migrate(memoryDB)
+            
+            // 初始化文件数据库
+            diskDB = try openDiskDatabase()
+            try diskMigrator.migrate(diskDB)
+            
+            // 异步加载数据到内存
+            Task {
+                await loadDataToMemory()
+            }
         } catch {
             fatalError("数据库初始化失败: \(error)")
         }
@@ -31,28 +42,68 @@ class GRDBDatabaseManager {
         return dbURL
     }
     
-    private func openDatabase() throws -> DatabaseWriter {
-        let dbWriter = try DatabasePool(path: databaseURL.path)
+    private func openDiskDatabase() throws -> DatabaseQueue {
+        let dbQueue = try DatabaseQueue(path: databaseURL.path)
         
-        // 配置数据库
-        var config = Configuration()
-        config.prepareDatabase { db in
-            // 启用外键约束
-            try db.execute(sql: "PRAGMA foreign_keys = ON")
-            // 优化性能
-            try db.execute(sql: "PRAGMA journal_mode = WAL")
-            try db.execute(sql: "PRAGMA synchronous = NORMAL")
-        }
-        
-        print("✅ GRDB数据库已打开")
-        return dbWriter
+        print("✅ 文件数据库已打开: \(databaseURL.path)")
+        return dbQueue
     }
     
-    // GRDB迁移系统 - 比手工SQL优雅多了
-    private var migrator: DatabaseMigrator {
+    // 加载文件数据库数据到内存
+    private func loadDataToMemory() async {
+        do {
+            let items = try await diskDB.read { db in
+                try ClipboardItem
+                    .order(ClipboardItem.Columns.timestamp.desc)
+                    .limit(1000)
+                    .fetchAll(db)
+            }
+            
+            // 批量插入到内存数据库
+            try await memoryDB.write { db in
+                for item in items {
+                    var mutableItem = item
+                    try mutableItem.insert(db)
+                }
+            }
+            
+            print("✅ 已加载 \(items.count) 条数据到内存数据库")
+        } catch {
+            print("❌ 加载数据到内存失败: \(error)")
+        }
+    }
+    
+    // 内存数据库迁移
+    private var memoryMigrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         
-        // V1: 创建初始表结构（兼容现有数据）
+        migrator.registerMigration("createClipboardItems") { db in
+            try db.create(table: "clipboard_items") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("content", .text).notNull()
+                t.column("type", .text).notNull()
+                t.column("timestamp", .integer).notNull()
+                t.column("source_app", .text)
+                t.column("source_app_bundle_id", .text)
+                t.column("is_favorite", .integer).notNull().defaults(to: 0)
+                t.column("html_content", .text)
+                t.column("copy_count", .integer).notNull().defaults(to: 1)
+                t.column("first_copy_time", .integer).notNull()
+                t.column("last_copy_time", .integer).notNull()
+                t.column("image_data", .blob)
+                t.column("image_dimensions", .text)
+                t.column("image_size", .integer)
+                t.column("file_path", .text)
+            }
+        }
+        
+        return migrator
+    }
+    
+    // 文件数据库迁移 - 保持完整结构和索引
+    private var diskMigrator: DatabaseMigrator {
+        var migrator = DatabaseMigrator()
+        
         migrator.registerMigration("createClipboardItems") { db in
             try db.create(table: "clipboard_items", ifNotExists: true) { t in
                 t.autoIncrementedPrimaryKey("id")
@@ -73,7 +124,6 @@ class GRDBDatabaseManager {
             }
         }
         
-        // V2: 创建索引优化查询性能
         migrator.registerMigration("createIndexes") { db in
             try db.create(index: "idx_timestamp", on: "clipboard_items", columns: ["timestamp"], ifNotExists: true)
             try db.create(index: "idx_type", on: "clipboard_items", columns: ["type"], ifNotExists: true)
@@ -81,64 +131,25 @@ class GRDBDatabaseManager {
             try db.create(index: "idx_source_app", on: "clipboard_items", columns: ["source_app"], ifNotExists: true)
         }
         
-        // V3: 创建FTS5全文搜索表和触发器
-        migrator.registerMigration("createFTS5") { db in
-            // 创建FTS5虚拟表
-            try db.execute(sql: """
-                CREATE VIRTUAL TABLE clipboard_items_fts USING fts5(
-                    content,
-                    source_app,
-                    content='clipboard_items',
-                    content_rowid='id'
-                )
-                """)
-            
-            // 从现有数据初始化FTS表
-            try db.execute(sql: """
-                INSERT INTO clipboard_items_fts(rowid, content, source_app)
-                SELECT id, content, source_app FROM clipboard_items
-                """)
-            
-            // 创建自动同步触发器
-            try db.execute(sql: """
-                CREATE TRIGGER clipboard_fts_insert AFTER INSERT ON clipboard_items 
-                BEGIN
-                    INSERT INTO clipboard_items_fts(rowid, content, source_app) 
-                    VALUES (new.id, new.content, new.source_app);
-                END
-                """)
-            
-            try db.execute(sql: """
-                CREATE TRIGGER clipboard_fts_update AFTER UPDATE ON clipboard_items 
-                BEGIN
-                    UPDATE clipboard_items_fts 
-                    SET content=new.content, source_app=new.source_app 
-                    WHERE rowid=new.id;
-                END
-                """)
-            
-            try db.execute(sql: """
-                CREATE TRIGGER clipboard_fts_delete AFTER DELETE ON clipboard_items 
-                BEGIN
-                    DELETE FROM clipboard_items_fts WHERE rowid=old.id;
-                END
-                """)
-        }
-        
         return migrator
     }
     
-    // 公开的数据库访问接口
-    var writer: DatabaseWriter {
-        return dbWriter
+    // 内存数据库访问 - 同步操作，快速响应
+    func readFromMemory<T>(_ block: @escaping (Database) throws -> T) throws -> T {
+        return try memoryDB.read(block)
     }
     
-    func read<T>(_ block: @escaping @Sendable (Database) throws -> T) async throws -> T {
-        return try await dbWriter.read(block)
+    func writeToMemory<T>(_ block: @escaping (Database) throws -> T) throws -> T {
+        return try memoryDB.write(block)
     }
     
-    func write<T>(_ block: @escaping @Sendable (Database) throws -> T) async throws -> T {
-        return try await dbWriter.write(block)
+    // 文件数据库访问 - 异步操作，持久化
+    func readFromDisk<T>(_ block: @escaping @Sendable (Database) throws -> T) async throws -> T {
+        return try await diskDB.read(block)
+    }
+    
+    func writeToDisk<T>(_ block: @escaping @Sendable (Database) throws -> T) async throws -> T {
+        return try await diskDB.write(block)
     }
 }
 
