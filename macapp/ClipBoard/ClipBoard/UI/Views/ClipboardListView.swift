@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 
 // MARK: - Text Highlighting
 
@@ -84,43 +85,40 @@ struct HighlightedText: View {
 struct ClipboardListView: View {
     @ObservedObject var clipboardManager: ClipboardManager
     @Binding var selectedItem: ClipboardItem?
-    let category: ClipboardCategory
+    @Binding var category: ClipboardCategory
     let selectedApp: String?
     @Binding var isSidebarVisible: Bool
     @Binding var isWindowPinned: Bool
     @ObservedObject var shortcutManager: KeyboardShortcutManager
     
-    // 简化状态管理
-    @StateObject private var inputManager: InputManager
+    // InputManager状态管理包装器
+    @StateObject private var inputManagerWrapper = InputManagerWrapper()
     @State private var sortConfig = SortConfiguration()
     @State private var items: [ClipboardItem] = []
     
     init(clipboardManager: ClipboardManager,
          selectedItem: Binding<ClipboardItem?>,
-         category: ClipboardCategory,
+         category: Binding<ClipboardCategory>,
          selectedApp: String?,
          isSidebarVisible: Binding<Bool>,
          isWindowPinned: Binding<Bool>,
          shortcutManager: KeyboardShortcutManager) {
         self.clipboardManager = clipboardManager
         self._selectedItem = selectedItem
-        self.category = category
+        self._category = category
         self.selectedApp = selectedApp
         self._isSidebarVisible = isSidebarVisible
         self._isWindowPinned = isWindowPinned
         self.shortcutManager = shortcutManager
         
-        // 使用统一的InputManager替代两个分离的管理器
-        self._inputManager = StateObject(wrappedValue: InputManager(
-            clipboardManager: clipboardManager,
-            shortcutManager: shortcutManager
-        ))
+        // 确保InputManager单例已配置
+        InputManager.configure(clipboardManager: clipboardManager)
     }
     
     // 简化的过滤逻辑：只处理应用过滤，搜索已在数据库层完成
     private var filteredItems: [ClipboardItem] {
         // 搜索时不需要UI层过滤，内存数据库LIKE查询已经处理
-        if !inputManager.searchText.isEmpty {
+        if !inputManagerWrapper.searchText.isEmpty {
             return items
         }
         
@@ -141,17 +139,21 @@ struct ClipboardListView: View {
             setupView()
         }
         .onDisappear {
-            inputManager.cleanup()
+            // 作为单例，不在这里清理系统资源，只重置状态
+            inputManagerWrapper.cleanup()
         }
         .onChange(of: filteredItems) { oldValue, newValue in
-            inputManager.updateItems(newValue)
-            selectedItem = inputManager.selectedItem
+            inputManagerWrapper.updateItems(newValue)
+            selectedItem = inputManagerWrapper.selectedItem
         }
-        .onChange(of: inputManager.selectedItem) { oldValue, newValue in
+        .onChange(of: inputManagerWrapper.selectedItem) { oldValue, newValue in
             selectedItem = newValue
         }
         .onChange(of: category) { oldValue, newValue in
-            loadData()
+            print("📝 Category changed from \(oldValue) to \(newValue)")
+            DispatchQueue.main.async {
+                loadData()
+            }
         }
         .onChange(of: sortConfig) { oldValue, newValue in
             loadData()
@@ -165,13 +167,13 @@ struct ClipboardListView: View {
     
     private var searchBarSection: some View {
         SearchBarComponent(
-            text: $inputManager.searchText,
+            text: $inputManagerWrapper.searchText,
             isSidebarVisible: $isSidebarVisible,
             isWindowPinned: $isWindowPinned,
             sortConfig: $sortConfig,
             shouldFocusOnAppear: true,
             onTextChange: { newText in
-                inputManager.updateSearchText(newText)
+                inputManagerWrapper.updateSearchText(newText)
                 loadData()
             }
         )
@@ -198,10 +200,10 @@ struct ClipboardListView: View {
     
     private var emptyStateView: some View {
         Group {
-            if inputManager.searchText.isEmpty {
+            if inputManagerWrapper.searchText.isEmpty {
                 EmptyStateView(category: category)
             } else {
-                SearchEmptyStateView(searchText: inputManager.searchText)
+                SearchEmptyStateView(searchText: inputManagerWrapper.searchText)
             }
         }
     }
@@ -212,10 +214,10 @@ struct ClipboardListView: View {
                 ForEach(filteredItems) { item in
                     ClipboardItemRow(
                         item: item,
-                        isSelected: inputManager.selectedItem?.id == item.id,
-                        searchText: inputManager.searchText
+                        isSelected: inputManagerWrapper.selectedItem?.id == item.id,
+                        searchText: inputManagerWrapper.searchText
                     ) {
-                        inputManager.select(item: item)
+                        inputManagerWrapper.select(item: item)
                     }
                     .contextMenu {
                         itemContextMenu(for: item)
@@ -248,11 +250,11 @@ struct ClipboardListView: View {
     
     private func setupView() {
         loadData()
-        inputManager.setup()
+        inputManagerWrapper.setup()
         
         shortcutManager.updateListState(
             focusedOnList: false,
-            currentIndex: inputManager.currentIndex,
+            currentIndex: inputManagerWrapper.currentIndex,
             totalCount: filteredItems.count
         )
     }
@@ -260,7 +262,7 @@ struct ClipboardListView: View {
     private func loadData() {
         let loadedItems: [ClipboardItem]
         
-        if inputManager.searchText.isEmpty {
+        if inputManagerWrapper.searchText.isEmpty {
             loadedItems = clipboardManager.getSortedItems(
                 for: category,
                 sortOption: sortConfig.option,
@@ -268,14 +270,14 @@ struct ClipboardListView: View {
             )
         } else {
             loadedItems = clipboardManager.searchItems(
-                query: inputManager.searchText,
+                query: inputManagerWrapper.searchText,
                 sourceApp: selectedApp
             )
         }
         
         self.items = loadedItems
-        inputManager.updateItems(filteredItems)
-        selectedItem = inputManager.selectedItem
+        inputManagerWrapper.updateItems(filteredItems)
+        selectedItem = inputManagerWrapper.selectedItem
     }
     
 }
@@ -370,11 +372,84 @@ struct EmptyStateView: View {
     }
 }
 
+// InputManager包装器，用于在SwiftUI中正确处理单例观察
+@MainActor
+final class InputManagerWrapper: ObservableObject {
+    private var cancellables = Set<AnyCancellable>()
+    
+    var inputManager: InputManager {
+        InputManager.getInstance()
+    }
+    
+    init() {
+        // 设置观察
+        setupObservation()
+    }
+    
+    private func setupObservation() {
+        // 延迟设置观察，直到InputManager配置完成
+        DispatchQueue.main.async { [weak self] in
+            self?.bindToInputManager()
+        }
+    }
+    
+    private func bindToInputManager() {
+        // 监听InputManager的变化并转发给SwiftUI
+        inputManager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+    }
+    
+    // 代理所有需要监听的属性
+    var searchText: String {
+        get { inputManager.searchText }
+        set { inputManager.updateSearchText(newValue) }
+    }
+    
+    var isSearchFocused: Bool {
+        get { inputManager.isSearchFocused }
+        set { inputManager.isSearchFocused = newValue }
+    }
+    
+    var selectedItem: ClipboardItem? {
+        inputManager.selectedItem
+    }
+    
+    var currentIndex: Int {
+        inputManager.currentIndex
+    }
+    
+    func updateSearchText(_ text: String) {
+        inputManager.updateSearchText(text)
+    }
+    
+    func updateItems(_ items: [ClipboardItem]) {
+        inputManager.updateItems(items)
+    }
+    
+    func select(item: ClipboardItem) {
+        inputManager.select(item: item)
+    }
+    
+    func setup() {
+        inputManager.setup()
+        // 重新绑定观察（防止setup过程中的变化）
+        bindToInputManager()
+    }
+    
+    func cleanup() {
+        inputManager.cleanup()
+    }
+}
+
 #Preview {
     ClipboardListView(
         clipboardManager: ClipboardManager(),
         selectedItem: .constant(nil),
-        category: .history,
+        category: .constant(.history),
         selectedApp: nil,
         isSidebarVisible: .constant(true),
         isWindowPinned: .constant(false),

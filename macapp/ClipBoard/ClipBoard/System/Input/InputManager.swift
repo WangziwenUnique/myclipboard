@@ -5,8 +5,28 @@ import AppKit
 // 统一的输入和选择管理器 - 合并KeyboardNavigationManager和SelectionManager
 @MainActor
 final class InputManager: ObservableObject {
+    static var shared: InputManager? = nil
+    
     private let clipboardManager: ClipboardManager
     private let shortcutManager: KeyboardShortcutManager
+    
+    // 配置单例实例
+    static func configure(clipboardManager: ClipboardManager) {
+        if shared == nil {
+            shared = InputManager(
+                clipboardManager: clipboardManager,
+                shortcutManager: KeyboardShortcutManager.shared
+            )
+        }
+    }
+    
+    // 访问单例的安全方法
+    static func getInstance() -> InputManager {
+        guard let instance = shared else {
+            fatalError("InputManager.shared必须通过configure()方法初始化")
+        }
+        return instance
+    }
     
     // Selection state - 原SelectionManager功能
     @Published private var selectedIndex: Int = 0
@@ -22,8 +42,8 @@ final class InputManager: ObservableObject {
     
     private var observers: [NSObjectProtocol] = []
     
-    init(clipboardManager: ClipboardManager, 
-         shortcutManager: KeyboardShortcutManager) {
+    private init(clipboardManager: ClipboardManager, 
+                 shortcutManager: KeyboardShortcutManager) {
         self.clipboardManager = clipboardManager
         self.shortcutManager = shortcutManager
     }
@@ -122,6 +142,18 @@ final class InputManager: ObservableObject {
     }
     
     func cleanup() {
+        // 作为单例，只在应用退出时清理全局资源
+        // 日常的隐藏/显示窗口操作不应该清理系统资源
+        print("🔄 InputManager cleanup() - 单例模式下只清理状态，保留系统资源")
+        
+        // 只清理业务状态，不清理观察者和定时器
+        reset()
+        searchText = ""
+        isSearchFocused = false
+    }
+    
+    func cleanupGlobalResources() {
+        // 应用退出时调用此方法清理全局资源
         cleanupObservers()
         searchDebounceTimer?.invalidate()
         searchDebounceTimer = nil

@@ -1,6 +1,11 @@
 import Foundation
 import GRDB
 
+// 内存数据加载完成通知
+extension Notification.Name {
+    static let memoryDataLoaded = Notification.Name("memoryDataLoaded")
+}
+
 class GRDBDatabaseManager {
     static let shared = GRDBDatabaseManager()
     
@@ -68,6 +73,11 @@ class GRDBDatabaseManager {
             }
             
             print("✅ 已加载 \(items.count) 条数据到内存数据库")
+            
+            // 通知数据加载完成
+            await MainActor.run {
+                NotificationCenter.default.post(name: .memoryDataLoaded, object: nil)
+            }
         } catch {
             print("❌ 加载数据到内存失败: \(error)")
         }

@@ -219,6 +219,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func quitApp() {
         Task { @MainActor in
             windowManager.cleanup()
+            // 清理InputManager的全局资源
+            InputManager.shared?.cleanupGlobalResources()
         }
         NSApp.terminate(nil)
     }
@@ -289,6 +291,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         Task { @MainActor in
             windowManager.cleanup()
+            // 清理InputManager的全局资源
+            InputManager.shared?.cleanupGlobalResources()
         }
     }
     

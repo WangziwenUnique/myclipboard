@@ -91,15 +91,13 @@ struct SidebarView: View {
     @State private var isAppSectionExpanded: Bool = false
     // 下拉按钮悬浮状态
     @State private var isDropdownHovered: Bool = false
-    // 可用应用列表
-    @State private var availableApps: [String] = []
     
     // 常用分类清单（不包含 history）
     private let commonCategories: [ClipboardCategory] = [.favorites, .text, .images, .links, .files, .mail]
     
-    // 获取可用应用列表
+    // 获取可用应用列表 - 响应式数据绑定
     private var appSourceIcons: [String] {
-        return availableApps
+        return clipboardManager.getDistinctSourceApps()
     }
     
     // 显示的应用图标列表（根据展开状态决定）
@@ -200,9 +198,6 @@ struct SidebarView: View {
             // CompactBottomControlBar()
         }
         .background(SidebarView.backgroundColor)
-        .onAppear {
-            availableApps = clipboardManager.getDistinctSourceApps()
-        }
     }
 }
 

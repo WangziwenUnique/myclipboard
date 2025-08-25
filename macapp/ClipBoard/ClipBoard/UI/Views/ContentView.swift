@@ -73,7 +73,7 @@ struct ContentView: View {
                         ClipboardListView(
                             clipboardManager: clipboardManager,
                             selectedItem: $selectedItem,
-                            category: selectedCategory,
+                            category: $selectedCategory,
                             selectedApp: selectedApp,
                             isSidebarVisible: $isSidebarVisible,
                             isWindowPinned: $isWindowPinned,
@@ -116,52 +116,20 @@ struct ContentView: View {
         .onAppear {
             setupKeyboardShortcuts()
             setupNotificationObservers()
+            // 配置InputManager单例
+            InputManager.configure(clipboardManager: clipboardManager)
         }
         .onDisappear {
             cleanupObservers()
         }
+        .onChange(of: selectedCategory) { oldValue, newValue in
+            print("🎯 ContentView selectedCategory onChange: \(oldValue) → \(newValue)")
+        }
     }
     
-    // MARK: - 快捷键设置
+    // MARK: - 快捷键设置（仅窗口控制）
     private func setupKeyboardShortcuts() {
-        // 分类切换快捷键
-        shortcutManager.registerHandler(for: .selectHistory) {
-            print("🔥 快捷键⌘1被触发 - 切换到History")
-            selectedCategory = .history
-        }
-        
-        shortcutManager.registerHandler(for: .selectFavorites) {
-            print("🔥 快捷键⌘2被触发 - 切换到Favorites")
-            selectedCategory = .favorites
-        }
-        
-        shortcutManager.registerHandler(for: .selectText) {
-            print("🔥 快捷键⌘3被触发 - 切换到Text")
-            selectedCategory = .text
-        }
-        
-        shortcutManager.registerHandler(for: .selectImages) {
-            print("🔥 快捷键⌘4被触发 - 切换到Images")
-            selectedCategory = .images
-        }
-        
-        shortcutManager.registerHandler(for: .selectLinks) {
-            print("🔥 快捷键⌘5被触发 - 切换到Links")
-            selectedCategory = .links
-        }
-        
-        shortcutManager.registerHandler(for: .selectFiles) {
-            print("🔥 快捷键⌘6被触发 - 切换到Files")
-            selectedCategory = .files
-        }
-        
-        shortcutManager.registerHandler(for: .selectMail) {
-            print("🔥 快捷键⌘7被触发 - 切换到Mail")
-            selectedCategory = .mail
-        }
-        
-        // 窗口控制快捷键
-        
+        // 窗口控制快捷键（UI层面的状态）
         shortcutManager.registerHandler(for: .toggleSidebar) {
             withAnimation(.easeInOut(duration: 0.2)) {
                 isSidebarVisible.toggle()

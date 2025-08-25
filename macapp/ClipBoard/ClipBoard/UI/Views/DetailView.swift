@@ -74,6 +74,8 @@ struct DetailToolbar: View {
                             .frame(width: 16, height: 16)
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .disabled(item.id == nil || item.id! <= 0)
+                    .opacity((item.id == nil || item.id! <= 0) ? 0.5 : 1.0)
                     
                     // 复制按钮
                     Button(action: {

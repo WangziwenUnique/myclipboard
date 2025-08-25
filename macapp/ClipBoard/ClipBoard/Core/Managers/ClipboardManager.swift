@@ -27,11 +27,28 @@ class ClipboardManager: NSObject, ObservableObject {
         // 从 UserDefaults 加载监控状态
         isMonitoring = UserDefaults.standard.object(forKey: "clipboardMonitoring") == nil ? true : UserDefaults.standard.bool(forKey: "clipboardMonitoring")
         
+        // 监听内存数据加载完成事件
+        NotificationCenter.default.addObserver(
+            self, 
+            selector: #selector(onMemoryDataLoaded),
+            name: .memoryDataLoaded, 
+            object: nil
+        )
+        
         startTimerMonitoring()
     }
     
     deinit {
         stopTimerMonitoring()
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    // 内存数据加载完成回调
+    @objc private func onMemoryDataLoaded() {
+        DispatchQueue.main.async {
+            self.dataDidChange.toggle()  // 触发UI更新
+            print("🔄 内存数据加载完成，触发UI更新")
+        }
     }
     
     private func startTimerMonitoring() {
@@ -373,9 +390,22 @@ class ClipboardManager: NSObject, ObservableObject {
     }
     
     func toggleFavorite(for item: ClipboardItem) {
-        var updatedItem = item
-        updatedItem.toggleFavorite()
-        saveItem(updatedItem)
+        guard let id = item.id, id > 0 else {
+            print("⚠️ 无法收藏未保存的项目")
+            return
+        }
+        
+        do {
+            let newFavoriteStatus = !item.isFavorite
+            try repository.updateFavoriteStatus(id, isFavorite: newFavoriteStatus)
+            
+            // 触发UI更新
+            DispatchQueue.main.async {
+                self.dataDidChange.toggle()
+            }
+        } catch {
+            print("收藏状态更新失败: \(error)")
+        }
     }
     
     func deleteItem(_ item: ClipboardItem) {
